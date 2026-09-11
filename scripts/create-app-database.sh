@@ -9,6 +9,7 @@
 # Result: database app_<app> owned by role app_<app> (LOGIN only, no CREATEDB,
 # no SUPERUSER, schema public locked to the owner).
 # =============================================================================
+# shellcheck source=lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
 
 APP="${1:-}"

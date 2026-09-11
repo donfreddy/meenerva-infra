@@ -7,6 +7,7 @@
 #   - prepares Traefik ACME storage
 #   - sanity-checks core-node/.env
 # =============================================================================
+# shellcheck source=lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
 require_root
 require_cmd docker ufw

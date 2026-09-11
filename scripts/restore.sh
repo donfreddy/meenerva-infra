@@ -9,6 +9,7 @@
 #
 # This script is deliberately interactive and asks before destructive steps.
 # =============================================================================
+# shellcheck source=lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
 require_cmd docker aws
 
