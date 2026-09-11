@@ -12,7 +12,7 @@
 #   make check-images-core     # or check-images-apps / check-images
 #   ./scripts/check-images.sh core-node/docker-compose.yml
 # =============================================================================
-# shellcheck source=lib/common.sh
+# shellcheck source=SCRIPTDIR/lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
 require_cmd docker
 

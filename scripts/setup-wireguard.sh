@@ -9,7 +9,7 @@
 #   ./scripts/setup-wireguard.sh add-peer <name> <peer-pubkey> <peer-endpoint-ip>
 #   ./scripts/setup-wireguard.sh show
 # =============================================================================
-# shellcheck source=lib/common.sh
+# shellcheck source=SCRIPTDIR/lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
 require_root
 require_cmd wg wg-quick

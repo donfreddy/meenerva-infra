@@ -17,7 +17,7 @@
 #   ./scripts/pull-images.sh core-node/docker-compose.yml
 #   ./scripts/pull-images.sh                                # core + apps + all apps/*
 # =============================================================================
-# shellcheck source=lib/common.sh
+# shellcheck source=SCRIPTDIR/lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
 require_cmd docker
 

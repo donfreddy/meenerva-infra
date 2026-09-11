@@ -7,7 +7,7 @@
 # Then edit the generated docker-compose.yml (replace APPNAME / SUBDOMAIN /
 # ports / image) and follow docs/08-adding-an-app.md.
 # =============================================================================
-# shellcheck source=lib/common.sh
+# shellcheck source=SCRIPTDIR/lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
 
 NAME="${1:-}"

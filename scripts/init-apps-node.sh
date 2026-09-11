@@ -3,7 +3,7 @@
 # init-apps-node.sh :: apps-node specific setup. Idempotent. Run as root after
 # bootstrap-node.sh. Establish the WireGuard mesh separately (setup-wireguard.sh).
 # =============================================================================
-# shellcheck source=lib/common.sh
+# shellcheck source=SCRIPTDIR/lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
 require_root
 require_cmd docker ufw

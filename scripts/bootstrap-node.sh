@@ -6,7 +6,7 @@
 #   timezone, apt upgrade, Docker CE + compose plugin, UFW baseline,
 #   fail2ban, unattended-upgrades, 4 GB swap, sysctl tuning, WireGuard tools.
 # =============================================================================
-# shellcheck source=lib/common.sh
+# shellcheck source=SCRIPTDIR/lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
 require_root
 require_cmd curl

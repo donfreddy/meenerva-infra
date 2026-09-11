@@ -3,7 +3,7 @@
 # backup-now.sh :: trigger an on-demand backup (does not wait for the cron).
 # Run on the node whose stack you want to back up.
 # =============================================================================
-# shellcheck source=lib/common.sh
+# shellcheck source=SCRIPTDIR/lib/common.sh
 source "$(dirname "$0")/lib/common.sh"
 require_cmd docker
 
