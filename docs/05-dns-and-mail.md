@@ -51,6 +51,24 @@ keys) is in the separate `stalwart-data` volume. There is nothing to hand-edit i
 this repo for Stalwart itself - see
 [`core-node/stalwart/README.md`](../core-node/stalwart/README.md).
 
+> **Do this within minutes of DNS going live, not hours.** Stalwart auto-bans IPs
+> it judges abusive (scanning, rapid requests). Because every request reaches it
+> through Traefik, Stalwart only ever sees **Traefik's container IP**, never the
+> real visitor - so once a bot scans `mail.meenerva.io` (they find new MX records
+> within minutes), Stalwart can ban "the visitor" and lock out everyone, including
+> you, with the whole HTTP surface returning 502 until the ban is cleared. The ban
+> is written to the `stalwart-data` volume, so a container restart does not clear
+> it. See the [community report](https://support.stalw.art/t/cant-finish-initial-install-my-ip-is-blacklisted/1644)
+> of this exact failure mode.
+>
+> **If you get a 502 on `mail.meenerva.io` before finishing the wizard**, nothing
+> of value is configured yet - clear it and start over:
+> ```sh
+> docker compose --project-directory core-node --env-file core-node/.env stop stalwart
+> docker volume rm meenerva-core_stalwart-data
+> docker compose --project-directory core-node --env-file core-node/.env up -d stalwart
+> ```
+
 First-run steps:
 
 1. `make core-up` starts `core-stalwart`. `STALWART_RECOVERY_ADMIN` (built from
@@ -58,15 +76,18 @@ First-run steps:
    immediately. (If you skipped that env var, Stalwart prints a temporary
    16-character password on first boot: `docker logs core-stalwart | grep -A8
    'bootstrap mode'`.)
-2. Open `https://mail.meenerva.io/admin` and log in as `admin`.
-3. **Complete the 5-step setup wizard**: hostname (`mail.meenerva.io`), primary
+2. Open `https://mail.meenerva.io/admin` and log in as `admin`, **immediately**.
+3. **Before anything else, Settings -> Security -> allow-list the Docker internal
+   network** (e.g. `172.16.0.0/12`) so Stalwart stops treating Traefik's IP as a
+   single hammering client. Do this before completing the rest of the wizard.
+4. **Complete the 5-step setup wizard**: hostname (`mail.meenerva.io`), primary
    domain (`meenerva.io`), storage backend (RocksDB, the default), account
    directory (**Internal** for Phase 1 - see section 4), logging destination.
-4. **Domains -> `meenerva.io` -> DKIM**: Stalwart generates a key pair and shows
+5. **Domains -> `meenerva.io` -> DKIM**: Stalwart generates a key pair and shows
    the exact DNS TXT record. Publish it, then *Check DNS* in the UI.
-5. **Accounts -> create mailboxes** (`firstname.lastname@meenerva.io`).
-6. Configure the outbound relay (section 3).
-7. Send a test to <https://www.mail-tester.com> and aim for 10/10.
+6. **Accounts -> create mailboxes** (`firstname.lastname@meenerva.io`).
+7. Configure the outbound relay (section 3).
+8. Send a test to <https://www.mail-tester.com> and aim for 10/10.
 
 ### TLS for mail protocols
 
@@ -196,3 +217,37 @@ from the email address alone.
 n8n (core-node) sends via `core-stalwart:587` using a dedicated
 `no-reply@meenerva.io` mailbox. This powers activation, onboarding and reporting
 workflows. Keycloak's SMTP settings point at the same mailbox.
+
+## 7. Troubleshooting: 502 Bad Gateway on `mail.meenerva.io`
+
+**Symptom:** Traefik logs show `OriginStatus: 502` for the `stalwart` service
+(connection to Stalwart succeeds, Stalwart itself answers 502), and
+`docker logs core-stalwart` shows repeated `Blocked IP address
+(security.ip-blocked) listenerId = "http-recovery"` lines.
+
+**Cause:** Stalwart's built-in abuse protection banned the IP it sees making
+requests - which, behind Traefik, is **Traefik's own container IP**, not the real
+visitor. A bot scanning the new MX/A records (this happens within minutes of DNS
+going live) is enough to trip it, and it then blocks everyone, including you. The
+ban lives in the `stalwart-data` volume, so restarting the container does not
+clear it.
+
+**Fix:**
+
+1. If the domain/DKIM/mailboxes are not configured yet (first-run), wipe the
+   volume and start clean:
+   ```sh
+   docker compose --project-directory core-node --env-file core-node/.env stop stalwart
+   docker volume rm meenerva-core_stalwart-data
+   docker compose --project-directory core-node --env-file core-node/.env up -d stalwart
+   ```
+   If real configuration already exists and you cannot afford to lose it, use
+   Stalwart's CLI/JMAP management API to remove the specific ban entry instead of
+   wiping the volume (check `docker exec core-stalwart stalwart-cli --help` for
+   the current subcommand, or the admin UI's Security section if it happens to be
+   reachable from a different, non-banned source in the meantime).
+2. **Immediately** after logging back into `https://mail.meenerva.io/admin`, go to
+   **Settings -> Security** and allow-list the Docker network (e.g.
+   `172.16.0.0/12`) *before* doing anything else in the wizard. This is step 3 in
+   section 2 above - do not skip it, or the next bot scan reproduces the same
+   lockout.
