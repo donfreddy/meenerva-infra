@@ -76,6 +76,16 @@ services:
 
   # ===========================================================================
   # Portainer CE :: visual container + stack management
+  #
+  # The official image is built FROM SCRATCH (no shell, no wget/curl), so a
+  # Docker-level `healthcheck:` command can never run inside it - it would
+  # always report "unhealthy" regardless of whether Portainer is actually
+  # fine. Health is instead checked by Traefik itself, from the outside, via
+  # the loadbalancer.healthcheck labels below.
+  #
+  # IMPORTANT: create the admin account within 5 minutes of first boot
+  # (https://portainer.<domain>) - Portainer locks account creation after
+  # that window and needs a container restart to reopen it.
   # ===========================================================================
   portainer:
     image: portainer/portainer-ce:2.45.0
@@ -94,12 +104,10 @@ services:
       traefik.http.routers.portainer.tls.certresolver: letsencrypt
       traefik.http.routers.portainer.middlewares: security-headers@file
       traefik.http.services.portainer.loadbalancer.server.port: "9000"
+      traefik.http.services.portainer.loadbalancer.healthcheck.path: /api/status
+      traefik.http.services.portainer.loadbalancer.healthcheck.interval: 30s
+      traefik.http.services.portainer.loadbalancer.healthcheck.timeout: 5s
     mem_limit: 512m
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9000/api/status"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
 
   # ===========================================================================
   # PostgreSQL 16 :: shared database, one DB + role per app (see postgres/initdb)
