@@ -315,7 +315,7 @@ services:
   # First candidate to relocate to apps-node if core RAM gets tight.
   # ===========================================================================
   n8n:
-    image: docker.n8n.io/n8nio/n8n:1.68.0
+    image: docker.n8n.io/n8nio/n8n:1.81.0
     container_name: core-n8n
     restart: unless-stopped
     depends_on:
