@@ -168,7 +168,10 @@ services:
     image: quay.io/keycloak/keycloak:26.0
     container_name: core-keycloak
     restart: unless-stopped
-    command: ["start", "--optimized"]
+    # `start` (not `start --optimized`) runs an implicit build on boot, so the
+    # DB vendor / proxy options below are applied without a custom image. Switch
+    # to `start --optimized` only once you bake a pre-built Keycloak image.
+    command: ["start"]
     depends_on:
       postgres:
         condition: service_healthy
