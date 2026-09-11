@@ -54,6 +54,13 @@ Keycloak -> realm `meenerva` -> Clients -> Create: `metabase`, confidential, red
 
 ## 7. Deploy
 
+First, verify the pinned image tag actually exists (Portainer will otherwise fail
+mid-pull with no early warning):
+
+```sh
+./scripts/check-images.sh apps-node/apps/metabase/docker-compose.yml
+```
+
 Portainer (apps-node) -> Stacks -> Add stack -> Repository:
 
 - compose path `apps-node/apps/metabase/docker-compose.yml`
@@ -74,7 +81,7 @@ Traefik picks up the labels within seconds and issues the certificate.
 ```
 - [ ] node chosen and correct
 - [ ] database created via create-app-database.sh (or dedicated engine justified)
-- [ ] image version pinned
+- [ ] image version pinned and verified with scripts/check-images.sh
 - [ ] container_name / compose name follow conventions
 - [ ] mem_limit + healthcheck set
 - [ ] joins edge only (+ apps-internal if sidecars)

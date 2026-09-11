@@ -14,6 +14,10 @@
 source "$(dirname "$0")/lib/common.sh"
 require_cmd docker
 
+# Needed on older Docker CLI versions where `docker manifest` is gated behind
+# the experimental flag; harmless no-op on newer ones.
+export DOCKER_CLI_EXPERIMENTAL=enabled
+
 TARGETS=()
 if [ "$#" -gt 0 ]; then
   TARGETS=("$@")
@@ -29,16 +33,38 @@ fail=0
 seen=""
 
 check_one() {
-  local image="$1"
+  local image="$1" out rc attempt
   case " ${seen} " in *" ${image} "*) return 0 ;; esac
   seen="${seen} ${image}"
   printf '  %-70s ' "${image}"
-  if docker manifest inspect "${image}" >/dev/null 2>&1; then
+
+  # One retry: registries occasionally hiccup on the first request, and this
+  # tells transient network errors apart from a genuinely missing tag.
+  for attempt in 1 2; do
+    out="$(docker manifest inspect "${image}" 2>&1)"
+    rc=$?
+    [ "$rc" -eq 0 ] && break
+    [ "$attempt" -eq 1 ] && sleep 2
+  done
+
+  if [ "$rc" -eq 0 ]; then
     ok "found"
-  else
-    printf '%s[x] NOT FOUND%s\n' "${c_red}" "${c_reset}"
-    fail=1
+    return 0
   fi
+
+  printf '%s[x] FAILED%s\n' "${c_red}" "${c_reset}"
+  if echo "${out}" | grep -qiE 'toomanyrequests|429|rate limit'; then
+    echo "      -> Docker Hub anonymous pull-rate limit hit (100 req/6h per IP)."
+    echo "         Fix: 'docker login' with a free Docker Hub account (raises the"
+    echo "         limit to 200/6h), or wait and re-run ./scripts/check-images.sh."
+  elif echo "${out}" | grep -qiE 'no such manifest|manifest unknown|not found'; then
+    echo "      -> Tag does not exist on the registry. Check the project's Docker"
+    echo "         Hub / registry page for the current release and fix the pin."
+  else
+    echo "      -> unexpected error:"
+    echo "${out}" | head -3 | sed 's/^/         /'
+  fi
+  fail=1
 }
 
 for f in "${TARGETS[@]}"; do
