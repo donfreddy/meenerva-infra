@@ -66,6 +66,11 @@ services:
       start_period: 60s
     mem_limit: 1536m
 
+  # Deliberately no `security-headers@file` / `security-headers-frameable@file`
+  # on this router: Collabora is embedded in an iframe served from a DIFFERENT
+  # origin (cloud.${PRIMARY_DOMAIN}), so any X-Frame-Options here - even
+  # SAMEORIGIN - would break the Nextcloud Office integration. Collabora does
+  # its own origin checking via the `domain` env var above.
   collabora:
     image: collabora/code:24.04.9.2.1
     container_name: apps-collabora

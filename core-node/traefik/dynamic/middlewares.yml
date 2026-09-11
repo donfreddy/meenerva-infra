@@ -17,6 +17,27 @@ http:
           X-Robots-Tag: "noindex,nofollow"
           Server: ""
 
+    # Same as security-headers, but allows a page to frame ITSELF
+    # (X-Frame-Options: SAMEORIGIN instead of DENY). Still blocks framing by
+    # any other site (clickjacking protection intact) but permits same-origin
+    # framing, which Keycloak's admin console requires: it loads its own
+    # login-status/check-sso iframe from its own origin to poll session state,
+    # and a blanket `DENY` makes that iframe fail with a "Timeout when waiting
+    # for 3rd party check iframe message" error, in every browser.
+    security-headers-frameable:
+      headers:
+        frameDeny: false
+        customFrameOptionsValue: "SAMEORIGIN"
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        customResponseHeaders:
+          X-Robots-Tag: "noindex,nofollow"
+          Server: ""
+
     # NOTE: the Traefik dashboard basic-auth middleware (`dashboard-auth`) is
     # defined via labels in docker-compose.yml using TRAEFIK_DASHBOARD_AUTH,
     # so the credential never lands in this file.

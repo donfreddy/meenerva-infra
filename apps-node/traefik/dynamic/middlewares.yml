@@ -16,6 +16,27 @@ http:
           X-Robots-Tag: "noindex,nofollow"
           Server: ""
 
+    # Same as security-headers, but allows same-origin framing
+    # (X-Frame-Options: SAMEORIGIN instead of DENY). Use this on any app that
+    # legitimately embeds itself in an iframe (Keycloak-style session checks,
+    # some SSO flows). It does NOT help an app that needs to be embedded by a
+    # DIFFERENT origin (e.g. Collabora framed by Nextcloud) - that requires
+    # not setting a restrictive X-Frame-Options on the embedded app's router
+    # at all, or explicitly allow-listing the framing origin.
+    security-headers-frameable:
+      headers:
+        frameDeny: false
+        customFrameOptionsValue: "SAMEORIGIN"
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        customResponseHeaders:
+          X-Robots-Tag: "noindex,nofollow"
+          Server: ""
+
     rate-limit:
       rateLimit:
         average: 100

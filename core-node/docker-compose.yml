@@ -208,7 +208,7 @@ services:
       traefik.http.routers.keycloak.rule: Host(`${KEYCLOAK_HOST}`)
       traefik.http.routers.keycloak.entrypoints: websecure
       traefik.http.routers.keycloak.tls.certresolver: letsencrypt
-      traefik.http.routers.keycloak.middlewares: security-headers@file
+      traefik.http.routers.keycloak.middlewares: security-headers-frameable@file
       traefik.http.services.keycloak.loadbalancer.server.port: "8080"
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nhost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
