@@ -18,6 +18,13 @@ timedatectl set-timezone "${TZ_VALUE}" || warn "could not set timezone"
 
 log "Updating base system"
 export DEBIAN_FRONTEND=noninteractive
+
+# Wait for unattended-upgrades or cloud-init to release apt locks
+while fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock >/dev/null 2>&1; do
+  log "Waiting for apt/dpkg locks to be released..."
+  sleep 5
+done
+
 apt-get update -qq
 apt-get upgrade -y -qq
 apt-get install -y -qq ca-certificates curl gnupg git ufw fail2ban \
