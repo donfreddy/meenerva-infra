@@ -13,7 +13,7 @@ help: ## Show this help
 		awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 ## ---- core-node ----
-.PHONY: core-config core-up core-down core-pull core-logs core-ps check-images check-images-core check-images-apps
+.PHONY: core-config core-up core-down core-pull core-logs core-ps check-images check-images-core check-images-apps pull-images-core pull-images-apps
 check-images: ## Verify every pinned image tag (core + apps-node + all apps/*) resolves
 	./scripts/check-images.sh
 
@@ -23,10 +23,16 @@ check-images-core: ## Verify only core-node's own image tags (used by core-up)
 check-images-apps: ## Verify only apps-node's edge-stack image tags (used by apps-up)
 	./scripts/check-images.sh apps-node/docker-compose.yml
 
+pull-images-core: ## Pull core-node's images one at a time with retries (use after a rate-limited core-up)
+	./scripts/pull-images.sh core-node/docker-compose.yml
+
+pull-images-apps: ## Pull apps-node's images one at a time with retries (use after a rate-limited apps-up)
+	./scripts/pull-images.sh apps-node/docker-compose.yml
+
 core-config: ## Validate the core stack (render merged compose)
 	$(CORE) config -q && echo "core-node/docker-compose.yml OK"
 
-core-up: ## Start / update the core stack. If it fails on a pull, run 'make check-images-core' to see why.
+core-up: ## Start / update the core stack. If it fails on a pull, run 'make pull-images-core' then retry.
 	$(CORE) up -d --remove-orphans
 
 core-down: ## Stop the core stack (volumes kept)
@@ -46,7 +52,7 @@ core-ps: ## Show core stack containers
 apps-config: ## Validate the apps-node edge stack
 	$(APPS) config -q && echo "apps-node/docker-compose.yml OK"
 
-apps-up: ## Start / update the apps-node edge stack. If it fails on a pull, run 'make check-images-apps' to see why.
+apps-up: ## Start / update the apps-node edge stack. If it fails on a pull, run 'make pull-images-apps' then retry.
 	$(APPS) up -d --remove-orphans
 
 apps-down: ## Stop the apps-node edge stack
