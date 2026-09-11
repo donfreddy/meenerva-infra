@@ -77,12 +77,22 @@ First-run steps:
    16-character password on first boot: `docker logs core-stalwart | grep -A8
    'bootstrap mode'`.)
 2. Open `https://mail.meenerva.io/admin` and log in as `admin`, **immediately**.
+   If `STALWART_RECOVERY_ADMIN` is set, no setup wizard appears at all - you land
+   straight on the dashboard with sane defaults already applied (RocksDB,
+   internal directory). That's normal; do the remaining steps via the normal
+   Settings/Domains/Directory menus instead of a guided wizard.
 3. **Before anything else, Settings -> Security -> allow-list the Docker internal
    network** (e.g. `172.16.0.0/12`) so Stalwart stops treating Traefik's IP as a
-   single hammering client. Do this before completing the rest of the wizard.
-4. **Complete the 5-step setup wizard**: hostname (`mail.meenerva.io`), primary
-   domain (`meenerva.io`), storage backend (RocksDB, the default), account
-   directory (**Internal** for Phase 1 - see section 4), logging destination.
+   single hammering client. Do this before touching anything else - see the
+   troubleshooting entry in section 7 for what happens if you skip it.
+4. **If the wizard does appear** (no `STALWART_RECOVERY_ADMIN` set): hostname
+   (`mail.meenerva.io`), primary domain (`meenerva.io`), storage backend
+   (RocksDB, the default; Path = `/var/lib/stalwart/data` - must be under the
+   mounted `stalwart-data` volume, i.e. `/var/lib/stalwart`, to survive a
+   restart; the size/buffer/cache defaults it pre-fills are fine for Phase 1),
+   account directory (**Internal** for Phase 1 - see section 4), logging
+   destination. Otherwise, verify the same under **Settings -> Storage** if you
+   landed straight on the dashboard.
 5. **Domains -> `meenerva.io` -> DKIM**: Stalwart generates a key pair and shows
    the exact DNS TXT record. Publish it, then *Check DNS* in the UI.
 6. **Accounts -> create mailboxes** (`firstname.lastname@meenerva.io`).
@@ -176,6 +186,37 @@ works. Do not point it at the internal Docker hostname or the WireGuard IP.
 - The image has no stable semver tag yet - pin `ghcr.io/bulwarkmail/webmail` to a
   digest before production.
 
+**Required: CORS on Stalwart.** `webmail.meenerva.io` and `mail.meenerva.io` are
+different origins, so the browser blocks Bulwark's JMAP calls until Stalwart sends
+CORS headers back. Login otherwise fails with *"Le serveur est joignable mais
+bloque les requêtes cross-origin"*. Fix it in the Stalwart admin UI, no restart
+needed (settings apply live):
+
+**Settings -> HTTP Server -> Response -> Headers**, add:
+
+```
+access-control-allow-origin: *
+access-control-allow-methods: GET, POST, PUT, DELETE, OPTIONS
+access-control-allow-headers: Authorization, Content-Type
+```
+
+All three are needed, not just `allow-origin`: the browser preflights JMAP calls
+with an `OPTIONS` request (because of the `Authorization` header and
+`Content-Type: application/json`, both non-"simple"), and without matching
+`allow-methods`/`allow-headers` the preflight itself fails even if `allow-origin`
+is set. Verify with:
+
+```sh
+curl -sD - -X OPTIONS -H "Origin: https://webmail.meenerva.io" \
+  -H "Access-Control-Request-Method: GET" \
+  https://mail.meenerva.io/jmap/session | grep -i access-control
+```
+
+(Stalwart also exposes a single-flag "Permissive CORS" toggle in some versions/UI
+locations - functionally equivalent to the wildcard `allow-origin` above, but the
+explicit headers route above is what's confirmed working here and also covers
+`allow-methods`/`allow-headers`, which the flag alone may not.)
+
 ### 5.2 Nextcloud Mail
 
 Nextcloud Mail connects to Stalwart over the **public** endpoint so the TLS name
@@ -232,22 +273,50 @@ going live) is enough to trip it, and it then blocks everyone, including you. Th
 ban lives in the `stalwart-data` volume, so restarting the container does not
 clear it.
 
-**Fix:**
+**Fix (confirmed working; the alternatives below were tried first and did not
+pan out - noted so you don't retry them):**
 
-1. If the domain/DKIM/mailboxes are not configured yet (first-run), wipe the
-   volume and start clean:
+- `stalwart-cli` is **not present** in `stalwartlabs/stalwart:v0.16.21-alpine` -
+  don't waste time on `docker exec core-stalwart stalwart-cli ...`.
+- `POST /api/settings` with a `{"type":"clear","prefix":"server.blocked-ip."}`
+  body (Basic auth) returns a plain 404 on this version - not the right endpoint.
+- The documented JMAP custom method (`x:BlockedIp/query` / `x:BlockedIp/set` on
+  `POST /api` with a Bearer token) was not verified end-to-end here - it may work
+  but requires first exchanging credentials for a token, which is more ceremony
+  than the fix below for a service with little/no data at stake yet.
+
+What actually works - wipe the volume and reconfigure. Before Phase 1 mailboxes
+matter to anyone, this costs a few minutes (re-add domain, republish the DKIM
+TXT, recreate mailboxes), which is cheaper than chasing the right unban API call:
+
+1. **Stop anything that talks to Stalwart automatically first**, or the ban gets
+   re-applied within seconds of the restart, before you can even log in to
+   allow-list anything. In practice this was Bulwark (`webmail`) retrying its
+   JMAP connection in a loop - close any open browser tab on
+   `mail.*`/`webmail.*` too:
+   ```sh
+   docker compose --project-directory core-node --env-file core-node/.env stop webmail
+   ```
+2. Stop Stalwart, remove the container (not just stop it - `docker volume rm`
+   refuses to run while any container, even a stopped one, still references the
+   volume), wipe the volume, start clean:
    ```sh
    docker compose --project-directory core-node --env-file core-node/.env stop stalwart
+   docker compose --project-directory core-node --env-file core-node/.env rm -f stalwart
    docker volume rm meenerva-core_stalwart-data
    docker compose --project-directory core-node --env-file core-node/.env up -d stalwart
    ```
-   If real configuration already exists and you cannot afford to lose it, use
-   Stalwart's CLI/JMAP management API to remove the specific ban entry instead of
-   wiping the volume (check `docker exec core-stalwart stalwart-cli --help` for
-   the current subcommand, or the admin UI's Security section if it happens to be
-   reachable from a different, non-banned source in the meantime).
-2. **Immediately** after logging back into `https://mail.meenerva.io/admin`, go to
-   **Settings -> Security** and allow-list the Docker network (e.g.
-   `172.16.0.0/12`) *before* doing anything else in the wizard. This is step 3 in
-   section 2 above - do not skip it, or the next bot scan reproduces the same
-   lockout.
+   If `docker volume rm` still refuses, find and remove whatever else references
+   it: `docker ps -a --filter volume=meenerva-core_stalwart-data`, then
+   `docker rm -f <id>` for each, before retrying.
+3. **Immediately**, with `webmail` still stopped and no browser tab open on
+   Stalwart, log into `https://mail.meenerva.io/admin` (`STALWART_RECOVERY_ADMIN`
+   from `.env` seeds a working `admin` login on the fresh volume - no setup
+   wizard appears when that env var is set, you land straight on the dashboard,
+   which is normal) and go to **Settings -> Security -> Allowed IPs** to
+   allow-list the Docker network (e.g. `172.16.0.0/12`) *before* touching
+   anything else - domains, mailboxes, CORS (section 5.1), all of it.
+4. Only then restart `webmail`:
+   ```sh
+   docker compose --project-directory core-node --env-file core-node/.env up -d webmail
+   ```
