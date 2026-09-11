@@ -40,10 +40,17 @@ check_one() {
 
   # One retry: registries occasionally hiccup on the first request, and this
   # tells transient network errors apart from a genuinely missing tag.
+  # NB: the `if out=$(...)` form is required under `set -e` (inherited from
+  # lib/common.sh) - a bare `out=$(...)` assignment aborts the whole script
+  # the instant the command fails, before rc is even read.
+  rc=1
   for attempt in 1 2; do
-    out="$(docker manifest inspect "${image}" 2>&1)"
-    rc=$?
-    [ "$rc" -eq 0 ] && break
+    if out="$(timeout 15 docker manifest inspect "${image}" 2>&1)"; then
+      rc=0
+      break
+    else
+      rc=$?
+    fi
     [ "$attempt" -eq 1 ] && sleep 2
   done
 
@@ -53,7 +60,11 @@ check_one() {
   fi
 
   printf '%s[x] FAILED%s\n' "${c_red}" "${c_reset}"
-  if echo "${out}" | grep -qiE 'toomanyrequests|429|rate limit'; then
+  if [ "$rc" -eq 124 ]; then
+    echo "      -> Timed out after 15s (network issue or registry throttling the"
+    echo "         connection). Re-run in a bit; if it keeps timing out, check the"
+    echo "         server's outbound network / DNS to the registry."
+  elif echo "${out}" | grep -qiE 'toomanyrequests|429|rate limit'; then
     echo "      -> Docker Hub anonymous pull-rate limit hit (100 req/6h per IP)."
     echo "         Fix: 'docker login' with a free Docker Hub account (raises the"
     echo "         limit to 200/6h), or wait and re-run ./scripts/check-images.sh."
