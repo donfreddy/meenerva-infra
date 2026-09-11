@@ -21,9 +21,10 @@ entryPoints:
           permanent: true
   websecure:
     address: ":443"
-    http:
-      middlewares:
-        - security-headers@file
+    # NOTE: no entrypoint-level middleware here - see core-node/traefik/traefik.yml
+    # for why (it applies to every router unconditionally and cannot be
+    # overridden per-router, which broke Keycloak's need for SAMEORIGIN
+    # framing). Each router declares its own security headers in its labels.
     transport:
       respondingTimeouts:
         readTimeout: "600s"

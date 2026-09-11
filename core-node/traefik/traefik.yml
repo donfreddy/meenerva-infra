@@ -24,9 +24,14 @@ entryPoints:
           permanent: true
   websecure:
     address: ":443"
-    http:
-      middlewares:
-        - security-headers@file
+    # NOTE: security headers are deliberately NOT set here at the entrypoint
+    # level. An entrypoint-level middleware applies to every router on this
+    # entrypoint unconditionally, on top of whatever the router declares
+    # itself - which silently broke Keycloak (it needs SAMEORIGIN framing,
+    # not the blanket security-headers@file's DENY, but couldn't opt out of
+    # an entrypoint-level middleware no matter what its own router used).
+    # Every router instead declares security-headers@file (or
+    # security-headers-frameable@file) explicitly in its own labels.
     transport:
       respondingTimeouts:
         readTimeout: "600s"      # large uploads (Nextcloud etc. proxied here in single-Traefik setups)
