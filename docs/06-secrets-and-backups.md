@@ -22,7 +22,8 @@
 | `REDIS_PASSWORD` | all cache users | rolling redeploy of consumers |
 | `KEYCLOAK_ADMIN_PASSWORD` | Keycloak bootstrap | change in Keycloak UI after first boot, then blank the env |
 | `N8N_ENCRYPTION_KEY` | n8n credential store | **do not rotate** without re-entering all credentials; back it up |
-| `STALWART_FALLBACK_ADMIN_SECRET` | Stalwart first boot | create a real admin in UI, then blank the env |
+| `STALWART_ADMIN_PASSWORD` | Stalwart bootstrap admin (`STALWART_RECOVERY_ADMIN`) | rotate the password in the admin UI after first login; the env var only seeds it |
+| `WEBMAIL_SESSION_SECRET` / `WEBMAIL_OAUTH_CLIENT_SECRET` | Bulwark Webmail | rotate + redeploy `core-webmail` |
 | `RESTIC_PASSWORD` | backup encryption | **losing this makes every backup unrecoverable** - store it in 3 places |
 | `B2_*` | offsite backup | create new B2 app key, update `.env` |
 | WireGuard private keys | mesh | regenerate + re-exchange public keys |

@@ -32,6 +32,7 @@ volumes:
   keycloak-data:      # imports/exports; realm state is in PostgreSQL
   stalwart-data:      # mailboxes + full-text index + generated keys (CRITICAL)
   n8n-data:           # workflows + encrypted credentials (CRITICAL)
+  stalwart-etc:       # Stalwart's own settings store (domain, DKIM, directory, ACME)
   webmail-data:       # Bulwark Webmail settings store
   backup-dumps:       # local rotating pg_dump output, shared with offsite-backup
 
@@ -41,7 +42,7 @@ services:
   # Traefik v3 :: edge reverse proxy + automatic TLS
   # ===========================================================================
   traefik:
-    image: traefik:v3.3
+    image: traefik:v3.7.13
     container_name: core-traefik
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
@@ -77,7 +78,7 @@ services:
   # Portainer CE :: visual container + stack management
   # ===========================================================================
   portainer:
-    image: portainer/portainer-ce:2.21.4
+    image: portainer/portainer-ce:2.45.0
     container_name: core-portainer
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
@@ -165,7 +166,7 @@ services:
   # Uses core-postgres (database app_keycloak).
   # ===========================================================================
   keycloak:
-    image: quay.io/keycloak/keycloak:26.0
+    image: quay.io/keycloak/keycloak:26.5.6
     container_name: core-keycloak
     restart: unless-stopped
     # `start` (not `start --optimized`) runs an implicit build on boot, so the
@@ -212,11 +213,17 @@ services:
   # ===========================================================================
   # Stalwart Mail Server :: SMTP / IMAP / JMAP / Sieve, DKIM signing
   # Mail protocol ports are published directly on the host (see docs/05).
-  # HTTP surface (admin + JMAP + autoconfig) is routed through Traefik.
-  # Directory backend: internal by default; SQL/Keycloak blocks in config.toml.
+  # HTTP surface (admin UI + JMAP + autoconfig) is routed through Traefik.
+  #
+  # v0.16+ no longer reads a config.toml: all settings (domain, DKIM, directory,
+  # relay, ACME) live in Stalwart's own store and are set through the first-run
+  # setup wizard (http://<host>:8080/admin) and the web admin UI afterwards.
+  # STALWART_RECOVERY_ADMIN seeds the initial administrator so login works even
+  # before the wizard is completed; STALWART_PUBLIC_URL tells Stalwart its own
+  # externally-reachable HTTPS URL (used for autoconfig/autodiscover/links).
   # ===========================================================================
   stalwart:
-    image: stalwartlabs/stalwart:v0.11.5
+    image: stalwartlabs/stalwart:v0.16.21-alpine
     container_name: core-stalwart
     restart: unless-stopped
     networks: [edge, core-internal]
@@ -229,9 +236,11 @@ services:
       - "4190:4190"   # ManageSieve
     environment:
       TZ: ${TZ}
+      STALWART_RECOVERY_ADMIN: admin:${STALWART_ADMIN_PASSWORD}
+      STALWART_PUBLIC_URL: https://${STALWART_ADMIN_HOST}
     volumes:
-      - ./stalwart/config:/opt/stalwart/etc:ro
-      - stalwart-data:/opt/stalwart/data
+      - stalwart-etc:/etc/stalwart      # Stalwart's own config store (was config.toml pre-0.16)
+      - stalwart-data:/var/lib/stalwart # mailboxes + full-text index (CRITICAL, see D-07)
     labels:
       traefik.enable: "true"
       traefik.docker.network: edge
@@ -404,6 +413,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - backup-dumps:/backup/pg-dumps:ro
       - stalwart-data:/backup/stalwart-data:ro
+      - stalwart-etc:/backup/stalwart-etc:ro
       - n8n-data:/backup/n8n-data:ro
       - webmail-data:/backup/webmail-data:ro
       - portainer-data:/backup/portainer-data:ro

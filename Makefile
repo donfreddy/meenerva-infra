@@ -13,11 +13,14 @@ help: ## Show this help
 		awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 ## ---- core-node ----
-.PHONY: core-config core-up core-down core-pull core-logs core-ps
+.PHONY: core-config core-up core-down core-pull core-logs core-ps check-images
+check-images: ## Verify every pinned image tag resolves before pulling (run before *-up)
+	./scripts/check-images.sh
+
 core-config: ## Validate the core stack (render merged compose)
 	$(CORE) config -q && echo "core-node/docker-compose.yml OK"
 
-core-up: ## Start / update the core stack
+core-up: check-images ## Start / update the core stack
 	$(CORE) up -d --remove-orphans
 
 core-down: ## Stop the core stack (volumes kept)
@@ -37,7 +40,7 @@ core-ps: ## Show core stack containers
 apps-config: ## Validate the apps-node edge stack
 	$(APPS) config -q && echo "apps-node/docker-compose.yml OK"
 
-apps-up: ## Start / update the apps-node edge stack
+apps-up: check-images ## Start / update the apps-node edge stack
 	$(APPS) up -d --remove-orphans
 
 apps-down: ## Stop the apps-node edge stack

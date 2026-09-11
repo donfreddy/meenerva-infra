@@ -71,8 +71,9 @@ occ config:app:set mail provisioning_settings --value='[
 
 ### Auth: XOAUTH2 / SSO (target, Phase 2)
 
-Once the Keycloak directory backend is live in Stalwart (`[directory.oidc]` in
-`core-node/stalwart/config/config.toml`), enable `OAUTHBEARER` / `XOAUTH2` on
+Once the Keycloak directory backend is live in Stalwart (Settings -> Directories
+in the Stalwart admin UI, see `docs/05-dns-and-mail.md` section 4), enable
+`OAUTHBEARER` / `XOAUTH2` on
 Stalwart's IMAP/SMTP and configure the Mail app's OAuth connection so the user's
 Keycloak token is used and no mailbox password is stored.
 

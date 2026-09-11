@@ -43,32 +43,43 @@ must be stable.
 
 ## 2. Stalwart configuration
 
-Config lives in `core-node/stalwart/config/config.toml` and is mounted read-only.
-Runtime data (mailboxes, indexes, generated keys) is in the `stalwart-data` volume.
+Since **v0.16**, Stalwart no longer reads a `config.toml` at all: every setting
+(domains, DKIM, directory backend, relay, TLS) lives in its own internal store
+(`/etc/stalwart`, the `stalwart-etc` Docker volume) and is managed through the web
+admin UI / JMAP management API. Runtime mail data (mailboxes, indexes, generated
+keys) is in the separate `stalwart-data` volume. There is nothing to hand-edit in
+this repo for Stalwart itself - see
+[`core-node/stalwart/README.md`](../core-node/stalwart/README.md).
 
 First-run steps:
 
-1. `make core-up` starts `core-stalwart`. On first boot with no admin set, it uses
-   `STALWART_FALLBACK_ADMIN_SECRET` from `.env`.
-2. Open `https://mail.meenerva.io`, log in as `admin`.
-3. **Domains -> add `meenerva.io`.** Stalwart generates a DKIM key pair and shows
-   the exact DNS TXT record to publish. Publish it, then *Check DNS* in the UI.
-4. **Accounts -> create mailboxes** (`firstname.lastname@meenerva.io`) or wire
-   Stalwart's directory to Keycloak / PostgreSQL (see section 4).
-5. Configure the outbound relay (section 3).
-6. Send a test to <https://www.mail-tester.com> and aim for 10/10.
+1. `make core-up` starts `core-stalwart`. `STALWART_RECOVERY_ADMIN` (built from
+   `STALWART_ADMIN_PASSWORD` in `.env`) seeds the `admin` account so you can log in
+   immediately. (If you skipped that env var, Stalwart prints a temporary
+   16-character password on first boot: `docker logs core-stalwart | grep -A8
+   'bootstrap mode'`.)
+2. Open `https://mail.meenerva.io/admin` and log in as `admin`.
+3. **Complete the 5-step setup wizard**: hostname (`mail.meenerva.io`), primary
+   domain (`meenerva.io`), storage backend (RocksDB, the default), account
+   directory (**Internal** for Phase 1 - see section 4), logging destination.
+4. **Domains -> `meenerva.io` -> DKIM**: Stalwart generates a key pair and shows
+   the exact DNS TXT record. Publish it, then *Check DNS* in the UI.
+5. **Accounts -> create mailboxes** (`firstname.lastname@meenerva.io`).
+6. Configure the outbound relay (section 3).
+7. Send a test to <https://www.mail-tester.com> and aim for 10/10.
 
 ### TLS for mail protocols
 
-Two supported approaches, pick one in `config.toml`:
+Configured in the admin UI under **Settings -> TLS / ACME** (no file to edit):
 
-- **A - ACME HTTP-01 via Traefik (default in the template).** Traefik forwards
-  `Host(mail.meenerva.io) && PathPrefix(/.well-known/acme-challenge/)` to Stalwart,
+- **A - ACME HTTP-01 via Traefik (default assumption in this repo).** Traefik
+  forwards `Host(mail.meenerva.io) && PathPrefix(/.well-known/acme-challenge/)` to
+  Stalwart (see the `stalwart-acme` router in `core-node/docker-compose.yml`),
   which runs its own ACME client and manages certs for 25/465/587/143/993. No DNS
-  API needed. Config: `[acme."letsencrypt"]` block with `challenge = "http-01"`.
+  API needed.
 - **B - ACME DNS-01 (recommended once you have a DNS provider API token).** Stalwart
   solves the challenge over DNS; works even if port 80 is busy and supports
-  wildcards. Config: `challenge = "dns-01"` + provider credentials in `.env`.
+  wildcards. Add the provider credentials in the admin UI's TLS settings.
 
 The webmail (`webmail.meenerva.io`) and the Stalwart admin/JMAP HTTP surface
 (`mail.meenerva.io`) are terminated by Traefik with Traefik's own certificate.
@@ -93,21 +104,21 @@ SMTP_RELAY_USER=...
 SMTP_RELAY_PASSWORD=...
 ```
 
-Stalwart's `config.toml` reads these into an outbound "relay" route. Keep a
-`direct` route as fallback for internal-only mail. Add the provider's `include:` to
-SPF and, if the provider signs, add their DKIM selector too (multi-signature is
-fine).
+Enter these in the admin UI under **Settings -> SMTP -> Outbound -> Remote host**
+(a "relay" route). Keep the default direct-to-MX route as fallback for
+internal-only mail. Add the provider's `include:` to SPF and, if the provider
+signs, add their DKIM selector too (multi-signature is fine).
 
 ## 4. Directory backend (choose per phase)
 
 | Phase | Backend | How |
 |-------|---------|-----|
-| Phase 1 (now) | Stalwart internal directory | Create mailboxes in the Stalwart UI. Simple, zero dependencies. |
-| Phase 1+ | PostgreSQL (`app_stalwart`) | `create-app-database.sh stalwart`, point `[directory."sql"]` at `10.10.0.1` / `core-postgres`. Lets n8n manage mailboxes via SQL. |
-| Phase 2+ | Keycloak (LDAP/OIDC) | Stalwart authenticates against Keycloak so one identity = mail + SSO. Recommended end state; wire it once Keycloak realm design is stable. |
+| Phase 1 (now) | Stalwart internal directory | Chosen in the setup wizard; manage mailboxes in the admin UI. Simple, zero dependencies. |
+| Phase 1+ | PostgreSQL (`app_stalwart`) | `create-app-database.sh stalwart`, then Settings -> Directories -> add a SQL directory pointing at `10.10.0.1` / `core-postgres`. Lets n8n manage mailboxes via SQL. |
+| Phase 2+ | Keycloak (LDAP/OIDC) | Settings -> Directories -> add an OIDC/LDAP directory against `https://id.meenerva.io/realms/meenerva`, so one identity = mail + SSO. Recommended end state; wire it once the Keycloak realm design is stable. |
 
-The template ships with the **internal directory** active and the SQL/Keycloak
-blocks present but commented, so you can start today and migrate without a rebuild.
+Start with **Internal** (the wizard default) and switch backend later from the
+admin UI - no rebuild or redeploy needed, it is a live setting change.
 
 ## 5. Mail clients (dual access - decision D-11)
 
@@ -156,11 +167,11 @@ SMTP  host: mail.meenerva.io   port: 587  security: STARTTLS
 
 Two auth models:
 
-1. **XOAUTH2 / SSO (target).** In Stalwart, enable OAuth for IMAP/SMTP
-   (`OAUTHBEARER` / `XOAUTH2`) backed by the Keycloak OIDC directory
-   (`[directory.oidc]` in `config.toml`). In Nextcloud, the Mail app picks up the
-   user's Keycloak access token - no mailbox password stored. Requires the
-   Keycloak directory backend to be live (Phase 2).
+1. **XOAUTH2 / SSO (target).** In Stalwart's admin UI, enable OAuth for IMAP/SMTP
+   (`OAUTHBEARER` / `XOAUTH2`) backed by the Keycloak OIDC directory (Settings ->
+   Directories, see section 4). In Nextcloud, the Mail app picks up the user's
+   Keycloak access token - no mailbox password stored. Requires the Keycloak
+   directory backend to be live (Phase 2).
 2. **Per-user app password (fallback, works today).** Each user creates an
    app-specific password in Stalwart and enters it once in Nextcloud Mail. Enable
    `mail.autoconfig` and set the provisioning defaults so new users get the account
