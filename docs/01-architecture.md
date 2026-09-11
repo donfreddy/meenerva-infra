@@ -31,7 +31,7 @@ that other services depend on.
 | Keycloak 26 | `quay.io/keycloak/keycloak` | Central identity provider (OIDC / SAML), MFA | 1.25 GB (heap capped) |
 | Stalwart Mail | `stalwartlabs/stalwart` | SMTP / IMAP / JMAP / Sieve, DKIM signing | 1 GB |
 | Bulwark Webmail | `ghcr.io/bulwarkmail/webmail` | Native JMAP web client for Stalwart (mail + calendar + contacts + files); standalone / fallback - primary client is Nextcloud Mail on apps-node, see D-11 | 512 MB |
-| n8n | `docker.n8n.io/n8nio/n8n` | Workflow automation (onboarding, offboarding, ...) | 640 MB |
+| n8n | `n8nio/n8n` | Workflow automation (onboarding, offboarding, ...) | 640 MB |
 | postgres-backup | `prodrigestivill/postgres-backup-local` | Nightly rotating SQL dumps | 128 MB |
 | offsite-backup | `offen/docker-volume-backup` | Encrypted push of dumps + volumes to Backblaze B2 | 256 MB |
 

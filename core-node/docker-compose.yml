@@ -315,7 +315,10 @@ services:
   # First candidate to relocate to apps-node if core RAM gets tight.
   # ===========================================================================
   n8n:
-    image: docker.n8n.io/n8nio/n8n:1.81.0
+    # Pulled straight from Docker Hub per n8n's current docs (docs.n8n.io),
+    # not the docker.n8n.io mirror - that mirror was observed redirecting
+    # back to registry-1.docker.io and getting 429'd on this repo specifically.
+    image: n8nio/n8n:1.81.0
     container_name: core-n8n
     restart: unless-stopped
     depends_on:
