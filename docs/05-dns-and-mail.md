@@ -23,16 +23,34 @@ Add AAAA records if the VPS has IPv6 (recommended for mail).
 |------|------|-------|
 | `meenerva.io` | MX | `10 mail.meenerva.io.` |
 | `mail` | A / AAAA | core-node IPs |
-| `meenerva.io` | TXT (SPF) | `v=spf1 mx a:mail.meenerva.io include:<relay-spf> -all` |
-| `<selector>._domainkey` | TXT (DKIM) | public key emitted by Stalwart on first run |
+| `meenerva.io` | TXT (SPF) | `v=spf1 mx a:mail.meenerva.io -all` |
+| `<selector>._domainkey` | TXT (DKIM) | public key emitted by Stalwart on first run (see warning below) |
 | `_dmarc` | TXT | `v=DMARC1; p=quarantine; rua=mailto:dmarc@meenerva.io; ruf=mailto:dmarc@meenerva.io; fo=1; adkim=s; aspf=s` |
 | `_mta-sts` | TXT | `v=STSv1; id=<timestamp>` |
 | `mta-sts` | A/CNAME | core-node (serves `/.well-known/mta-sts.txt` via Traefik) |
 | `_smtp._tls` | TXT | `v=TLSRPTv1; rua=mailto:tls-reports@meenerva.io` |
 
-Replace `<relay-spf>` with the `include:` your transactional provider gives you
-(e.g. `include:amazonses.com`). If you do **not** use a relay initially, drop the
-`include:` and keep `v=spf1 mx a:mail.meenerva.io -all`.
+The SPF record above is the **Phase 1 default: no relay** (matches decision D-08
+being optional at first - see section 3 below). It is copy-paste ready as-is.
+**Only once you actually add a transactional relay**, append its
+`include:` before `-all` with the real value the provider gives you, e.g.:
+
+```
+v=spf1 mx a:mail.meenerva.io include:amazonses.com -all
+```
+
+> **Do not paste `include:<relay-spf>` or any other `<placeholder>` literally
+> into a DNS TXT record.** SPF has no concept of a placeholder - a literal
+> `<...>` in the record is a syntax error (`permerror`), which mail-tester.com
+> and receiving servers treat as **worse than having no SPF record at all**. If
+> you are not using a relay yet, the record has no `include:` clause, full stop.
+
+> **DKIM: two selectors, not one.** Stalwart signs with two algorithms (Ed25519
+> and RSA) by default and shows you two separate TXT records to publish - both
+> must go into DNS (e.g. `v1-ed25519-<date>._domainkey` and
+> `v1-rsa-<date>._domainkey`), not just one, or the signatures that reference the
+> missing selector fail with "key not found in DNS". Verify each with
+> `dig +short TXT <selector>._domainkey.meenerva.io` before re-testing.
 
 ### Reverse DNS (PTR) - do not skip
 
