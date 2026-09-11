@@ -1,0 +1,92 @@
+# =============================================================================
+# APPLICATION TEMPLATE
+# Copy this directory with:  ./scripts/new-app.sh <name>
+# Then replace every APPNAME / <...> placeholder and delete the parts you do not
+# need. Deploy as a Portainer Git stack pointing at this file.
+#
+# Rules (see docs/03 + docs/08):
+#   - pin the image to an explicit version
+#   - container_name: apps-APPNAME   |   compose name: meenerva-APPNAME
+#   - join `edge` (external); join `apps-internal` only for private sidecars
+#   - set mem_limit AND healthcheck on every service
+#   - DB/Redis/SMTP point at core-node over WireGuard (10.10.0.1)
+# =============================================================================
+
+name: meenerva-APPNAME
+
+networks:
+  edge:
+    external: true
+  apps-internal:
+    external: true
+
+volumes:
+  APPNAME-data:
+
+services:
+  APPNAME:
+    image: vendor/APPNAME:1.2.3            # <-- pin a real version
+    container_name: apps-APPNAME
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    networks: [edge]                       # add apps-internal only if you have sidecars
+    environment:
+      TZ: ${TZ}
+
+      # --- database (shared core-postgres over WireGuard) ---
+      DB_HOST: ${CORE_DB_HOST}
+      DB_PORT: ${CORE_DB_PORT}
+      DB_NAME: app_APPNAME
+      DB_USER: app_APPNAME
+      DB_PASSWORD: ${APPNAME_DB_PASSWORD}
+
+      # --- cache (shared core-redis over WireGuard) ---
+      REDIS_URL: redis://:${CORE_REDIS_PASSWORD}@${CORE_REDIS_HOST}:${CORE_REDIS_PORT}/<index>
+
+      # --- outbound mail (Stalwart relay on core-node) ---
+      SMTP_HOST: ${CORE_SMTP_HOST}
+      SMTP_PORT: ${CORE_SMTP_PORT}
+      SMTP_USER: ${MAIL_FROM}
+      SMTP_PASSWORD: ${MAIL_FROM_PASSWORD}
+      SMTP_FROM: ${MAIL_FROM}
+      SMTP_TLS: starttls
+
+      # --- identity (Keycloak OIDC) ---
+      OIDC_ISSUER_URL: ${OIDC_ISSUER}
+      OIDC_CLIENT_ID: APPNAME
+      OIDC_CLIENT_SECRET: ${APPNAME_OIDC_SECRET}
+
+    volumes:
+      - APPNAME-data:/var/lib/APPNAME
+
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: edge
+      traefik.http.routers.APPNAME.rule: Host(`SUBDOMAIN.${PRIMARY_DOMAIN}`)
+      traefik.http.routers.APPNAME.entrypoints: websecure
+      traefik.http.routers.APPNAME.tls.certresolver: letsencrypt
+      traefik.http.routers.APPNAME.middlewares: security-headers@file
+      traefik.http.services.APPNAME.loadbalancer.server.port: "8080"   # <-- container port
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    mem_limit: 512m                        # <-- size for the real workload
+
+  # --- OPTIONAL: dedicated engine sidecar (only if core-postgres cannot serve it) ---
+  # APPNAME-clickhouse:
+  #   image: clickhouse/clickhouse-server:24.8
+  #   container_name: apps-APPNAME-clickhouse
+  #   restart: unless-stopped
+  #   networks: [apps-internal]
+  #   volumes: [APPNAME-clickhouse-data:/var/lib/clickhouse]
+  #   mem_limit: 2g
+  #   healthcheck:
+  #     test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8123/ping"]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 5

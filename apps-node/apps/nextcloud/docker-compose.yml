@@ -1,0 +1,91 @@
+# =============================================================================
+# Nextcloud + Collabora Online :: first reference application (apps-node)
+#   cloud.meenerva.io   -> Nextcloud
+#   office.meenerva.io  -> Collabora (document editing)
+# Database: app_nextcloud on core-postgres (WireGuard). Cache: core-redis db 3.
+# =============================================================================
+
+name: meenerva-nextcloud
+
+networks:
+  edge:
+    external: true
+  apps-internal:
+    external: true
+
+volumes:
+  nextcloud-data:      # config + apps + user data (add to offsite-backup)
+  nextcloud-html:
+
+services:
+
+  nextcloud:
+    image: nextcloud:30-apache
+    container_name: apps-nextcloud
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    networks: [edge, apps-internal]
+    environment:
+      TZ: ${TZ}
+      POSTGRES_HOST: ${CORE_DB_HOST}:${CORE_DB_PORT}
+      POSTGRES_DB: app_nextcloud
+      POSTGRES_USER: app_nextcloud
+      POSTGRES_PASSWORD: ${NEXTCLOUD_DB_PASSWORD}
+      REDIS_HOST: ${CORE_REDIS_HOST}
+      REDIS_HOST_PORT: ${CORE_REDIS_PORT}
+      REDIS_HOST_PASSWORD: ${CORE_REDIS_PASSWORD}
+      NEXTCLOUD_TRUSTED_DOMAINS: cloud.${PRIMARY_DOMAIN}
+      OVERWRITEPROTOCOL: https
+      OVERWRITECLIURL: https://cloud.${PRIMARY_DOMAIN}
+      # System / transactional mail (notifications). The user-facing Nextcloud
+      # Mail app is configured in-app against mail.meenerva.io:993/587 - see
+      # README.md "Mail app" and decision D-11.
+      SMTP_HOST: ${CORE_SMTP_HOST}
+      SMTP_PORT: ${CORE_SMTP_PORT}
+      SMTP_SECURE: tls
+      SMTP_NAME: ${MAIL_FROM}
+      SMTP_PASSWORD: ${MAIL_FROM_PASSWORD}
+      MAIL_FROM_ADDRESS: no-reply
+      MAIL_DOMAIN: ${PRIMARY_DOMAIN}
+    volumes:
+      - nextcloud-html:/var/www/html
+      - nextcloud-data:/var/www/html/data
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: edge
+      traefik.http.routers.nextcloud.rule: Host(`cloud.${PRIMARY_DOMAIN}`)
+      traefik.http.routers.nextcloud.entrypoints: websecure
+      traefik.http.routers.nextcloud.tls.certresolver: letsencrypt
+      traefik.http.routers.nextcloud.middlewares: security-headers@file,nextcloud-caldav@file
+      traefik.http.services.nextcloud.loadbalancer.server.port: "80"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/status.php"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    mem_limit: 1536m
+
+  collabora:
+    image: collabora/code:24.04.9.2.1
+    container_name: apps-collabora
+    restart: unless-stopped
+    networks: [edge]
+    environment:
+      TZ: ${TZ}
+      domain: "cloud\\.${PRIMARY_DOMAIN}"
+      dictionaries: "en_US fr_FR"
+      extra_params: "--o:ssl.enable=false --o:ssl.termination=true"
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: edge
+      traefik.http.routers.collabora.rule: Host(`office.${PRIMARY_DOMAIN}`)
+      traefik.http.routers.collabora.entrypoints: websecure
+      traefik.http.routers.collabora.tls.certresolver: letsencrypt
+      traefik.http.services.collabora.loadbalancer.server.port: "9980"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9980/hosting/discovery"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    mem_limit: 1g

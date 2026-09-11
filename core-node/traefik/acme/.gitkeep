@@ -1,0 +1,4 @@
+# Traefik ACME state (account key + issued certificates) is stored in the
+# Docker named volume `traefik-acme`, not in this directory. This folder is a
+# placeholder in case you switch to a bind mount. It is backed up to B2 as a
+# courtesy copy only - Let's Encrypt re-issues in seconds after a rebuild.

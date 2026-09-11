@@ -1,0 +1,153 @@
+# =============================================================================
+# Stalwart Mail Server :: bootstrap configuration (core-node)
+#
+# Stalwart keeps most runtime settings in its own store and exposes them through
+# the web admin UI (https://mail.<domain>) and the CLI. This file only provides
+# what is needed to start the server the first time: listeners, the storage
+# backend, TLS/ACME, and a fallback administrator.
+#
+# After first boot:
+#   1. Log in at https://mail.<domain> as `admin` / STALWART_FALLBACK_ADMIN_SECRET
+#   2. Add the domain, publish the DKIM record it generates
+#   3. Create mailboxes (or wire the SQL / OIDC directory - see docs/05 section 4)
+#   4. Configure the outbound relay (see [queue.outbound] note below)
+#   5. Create a real admin account, then blank STALWART_FALLBACK_ADMIN_SECRET
+#
+# Reference: https://stalw.art/docs/
+# =============================================================================
+
+[server]
+hostname = "mail.meenerva.io"
+
+# --- Network listeners ------------------------------------------------------
+[server.listener.smtp]
+bind = ["[::]:25"]
+protocol = "smtp"
+
+[server.listener.submission]
+bind = ["[::]:587"]
+protocol = "smtp"
+
+[server.listener.submissions]
+bind = ["[::]:465"]
+protocol = "smtp"
+tls.implicit = true
+
+[server.listener.imap]
+bind = ["[::]:143"]
+protocol = "imap"
+
+[server.listener.imaptls]
+bind = ["[::]:993"]
+protocol = "imap"
+tls.implicit = true
+
+[server.listener.sieve]
+bind = ["[::]:4190"]
+protocol = "managesieve"
+
+# HTTP surface: JMAP, admin UI, autoconfig/autodiscover, ACME HTTP-01 challenge.
+# Routed through Traefik (see docker-compose.yml labels).
+[server.listener.http]
+bind = ["[::]:8080"]
+protocol = "http"
+
+# --- Storage --------------------------------------------------------------
+# Embedded RocksDB: mailboxes, blobs, full-text index, settings. No dependency
+# on core-postgres. This is the single directory to relocate if it grows large
+# (see decision D-07): it maps to the `stalwart-data` Docker volume.
+[store.rocksdb]
+type = "rocksdb"
+path = "/opt/stalwart/data"
+compression = "lz4"
+
+[storage]
+data = "rocksdb"
+fts = "rocksdb"
+blob = "rocksdb"
+lookup = "rocksdb"
+directory = "internal"
+
+# --- Directory (identity) backend --------------------------------------------
+# Default: Stalwart's internal directory (create users in the web UI).
+[directory.internal]
+type = "internal"
+store = "rocksdb"
+
+# --- OPTION: PostgreSQL directory (uncomment + create app_stalwart DB) -------
+# Lets n8n provision/deprovision mailboxes via SQL during onboarding/offboarding.
+# [store.postgres]
+# type = "postgresql"
+# host = "10.10.0.1"
+# port = 5432
+# database = "app_stalwart"
+# user = "app_stalwart"
+# password = "%{env:STALWART_DB_PASSWORD}%"
+#
+# [directory.sql]
+# type = "sql"
+# store = "postgres"
+# columns.class = "type"
+# columns.description = "name"
+# columns.secret = "secret"
+# columns.quota = "quota"
+
+# --- OPTION: Keycloak / OIDC directory (Phase 2 - recommended end state) -----
+# [directory.oidc]
+# type = "oidc"
+# endpoint.url = "https://id.meenerva.io/realms/meenerva"
+# ... (see https://stalw.art/docs/auth/backend/oidc)
+
+# --- TLS / ACME ------------------------------------------------------------
+# Stalwart manages its own certificate for the mail protocol ports. HTTP-01
+# challenge is forwarded by Traefik (router `stalwart-acme` in compose).
+# Switch to DNS-01 once you have a DNS provider API token (see docs/05).
+[acme."letsencrypt"]
+directory = "https://acme-v02.api.letsencrypt.org/directory"
+challenge = "http-01"
+contact = ["admin@meenerva.io"]
+domains = ["mail.meenerva.io"]
+default = true
+
+# --- Authentication / fallback admin ----------------------------------------
+[authentication.fallback-admin]
+user = "admin"
+secret = "%{env:STALWART_FALLBACK_ADMIN_SECRET}%"
+
+# --- Outbound delivery ----------------------------------------------------
+# Default route is direct-to-MX. To use the transactional relay (recommended,
+# decision D-08) configure a "relay" host in the admin UI (Settings -> SMTP ->
+# Outbound) or uncomment below, then set SMTP_RELAY_* in core-node/.env.
+#
+# [queue.outbound.next-hop]
+# relay = "smart-host"
+#
+# [remote."smart-host"]
+# address = "%{env:SMTP_RELAY_HOST}%"
+# port = 587
+# protocol = "smtp"
+# tls.implicit = false
+# tls.allow-invalid-certs = false
+# auth.username = "%{env:SMTP_RELAY_USER}%"
+# auth.secret = "%{env:SMTP_RELAY_PASSWORD}%"
+
+# --- Logging ---------------------------------------------------------------
+[tracer.stdout]
+type = "stdout"
+level = "info"
+ansi = false
+enable = true
+
+# --- DKIM / DMARC / SPF ----------------------------------------------------
+# Signature keys are generated per-domain from the admin UI when you add the
+# domain. DMARC/SPF verification of inbound mail is enabled by default.
+[auth.dkim]
+sign = ["rsa", "ed25519"]
+verify = "relaxed"
+
+[auth.spf.verify]
+ehlo = "relaxed"
+mail-from = "relaxed"
+
+[auth.dmarc.verify]
+verify = "relaxed"

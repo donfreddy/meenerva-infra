@@ -1,0 +1,96 @@
+# =============================================================================
+# meenerva-infra :: apps-node edge stack
+# Runs on: Contabo Cloud VPS 8 (apps-node, WireGuard 10.10.0.2)
+#
+# apps-node runs its OWN Traefik (decision D-05). Application stacks live under
+# apps/<name>/ and are deployed independently as Portainer Git stacks; they join
+# the `edge` network created here.
+#
+# Shared services (PostgreSQL, Redis, outbound SMTP) live on core-node and are
+# reached over WireGuard at 10.10.0.1. Identity is reached at https://id.<domain>.
+# =============================================================================
+
+name: meenerva-apps
+
+networks:
+  edge:
+    name: edge
+    driver: bridge
+  apps-internal:
+    name: apps-internal
+    driver: bridge
+    internal: true
+
+volumes:
+  traefik-acme:
+  apps-offsite-cache:
+
+services:
+
+  traefik:
+    image: traefik:v3.3
+    container_name: apps-traefik
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    networks: [edge]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      TZ: ${TZ}
+      TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - traefik-acme:/acme
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: edge
+      traefik.http.routers.traefik.rule: Host(`traefik-apps.${PRIMARY_DOMAIN}`)
+      traefik.http.routers.traefik.entrypoints: websecure
+      traefik.http.routers.traefik.tls.certresolver: letsencrypt
+      traefik.http.routers.traefik.service: api@internal
+      traefik.http.middlewares.dashboard-auth.basicauth.users: ${TRAEFIK_DASHBOARD_AUTH}
+      traefik.http.routers.traefik.middlewares: dashboard-auth,security-headers@file
+    mem_limit: 192m
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  portainer-agent:
+    image: portainer/agent:2.21.4
+    container_name: apps-portainer-agent
+    restart: unless-stopped
+    networks: [edge]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+    ports:
+      - "10.10.0.2:9001:9001"     # reachable from the core-node Portainer over WireGuard
+    mem_limit: 128m
+
+  # Off-site backup of apps-node volumes to Backblaze B2.
+  offsite-backup:
+    image: offen/docker-volume-backup:v2.43.0
+    container_name: apps-offsite-backup
+    restart: unless-stopped
+    environment:
+      BACKUP_CRON_EXPRESSION: ${BACKUP_CRON}
+      BACKUP_FILENAME: "meenerva-apps-%Y%m%dT%H%M%S.tar.gz"
+      BACKUP_PRUNING_PREFIX: "meenerva-apps-"
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS}
+      GPG_PASSPHRASE: ${RESTIC_PASSWORD}
+      AWS_ENDPOINT: ${B2_S3_ENDPOINT}
+      AWS_S3_BUCKET_NAME: ${B2_BUCKET}
+      AWS_ACCESS_KEY_ID: ${B2_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${B2_SECRET_ACCESS_KEY}
+      AWS_S3_PATH: apps-node
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - apps-offsite-cache:/backup/cache
+      # Add each app's stateful volume here, read-only, e.g.:
+      # - nextcloud-data:/backup/nextcloud-data:ro
+    mem_limit: 256m

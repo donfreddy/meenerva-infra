@@ -1,0 +1,37 @@
+# Shared Traefik middlewares, referenced from container labels as
+# `<name>@file` (e.g. security-headers@file).
+
+http:
+  middlewares:
+
+    security-headers:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        customResponseHeaders:
+          X-Robots-Tag: "noindex,nofollow"
+          Server: ""
+
+    # NOTE: the Traefik dashboard basic-auth middleware (`dashboard-auth`) is
+    # defined via labels in docker-compose.yml using TRAEFIK_DASHBOARD_AUTH,
+    # so the credential never lands in this file.
+
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
+
+    compress:
+      compress: {}
+
+    # Redirect apex / www to the primary host if desired.
+    redirect-to-primary:
+      redirectRegex:
+        regex: "^https?://(www\\.)?(.+)"
+        replacement: "https://${2}"
+        permanent: true

@@ -1,0 +1,37 @@
+# Secrets and environment
+.env
+*.env
+!*.env.example
+*.secret
+secrets/
+*.key
+*.pem
+!**/traefik/**/*.pem.example
+
+# Traefik ACME storage (contains private keys + issued certs)
+**/acme/acme.json
+**/traefik/acme/*
+!**/traefik/acme/.gitkeep
+
+# WireGuard
+*.conf
+!**/wireguard/*.conf.example
+wg-keys/
+
+# Stalwart runtime data / generated config
+core-node/stalwart/data/
+core-node/stalwart/logs/
+
+# Local backup artefacts
+backups/
+*.sql
+*.sql.gz
+*.dump
+restic-cache/
+
+# OS / editor
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/

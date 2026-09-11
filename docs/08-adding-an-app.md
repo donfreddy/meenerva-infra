@@ -1,0 +1,87 @@
+# 08 - Adding an application
+
+Target: a new open-source app live in ~5 minutes. Example: `metabase`.
+
+## 1. Pick the node
+
+| The app is... | Goes on |
+|---------------|---------|
+| identity, mail, automation, a shared data store | core-node |
+| business / collaboration / user-facing | apps-node |
+| SIEM / analytics / BI (heavy indexing) | data-node (when it exists) |
+
+## 2. Scaffold
+
+```sh
+make app-new NAME=metabase
+# creates apps-node/apps/metabase/{docker-compose.yml,.env.example,README.md} from _template
+```
+
+## 3. Create its database (if it uses PostgreSQL)
+
+```sh
+./scripts/create-app-database.sh metabase        # run on core-node
+# prints the generated password once; put it in the app's .env / Portainer env
+```
+
+Apps needing a non-Postgres engine (ClickHouse, OpenSearch, MongoDB) declare that
+container inside their own `docker-compose.yml` with its own volume and mem_limit.
+
+## 4. Fill the compose file
+
+Edit `apps-node/apps/metabase/docker-compose.yml` (the template is fully annotated):
+
+- image pinned to a specific version (never `latest` in `main`)
+- `container_name: apps-metabase`, compose `name: meenerva-metabase`
+- joins `edge` (`external: true`); joins `apps-internal` only if it has private
+  sidecars
+- DB env: host `10.10.0.1`, db `app_metabase`, user `app_metabase`
+- Redis env (if needed): `redis://:PASS@10.10.0.1:6379/<index>`
+- SMTP env: host `10.10.0.1`, port `587`, from `no-reply@meenerva.io`
+- OIDC env: issuer `https://id.meenerva.io/realms/meenerva`, client `metabase`
+- Traefik labels: `Host(\`bi.meenerva.io\`)`, `websecure`, `certresolver=letsencrypt`,
+  `loadbalancer.server.port=<port>`, `security-headers@file`
+- explicit `mem_limit` and `healthcheck`
+
+## 5. DNS
+
+Add `bi  A  <apps-node-ip>` (or rely on the wildcard if configured).
+
+## 6. Keycloak client
+
+Keycloak -> realm `meenerva` -> Clients -> Create: `metabase`, confidential, redirect
+`https://bi.meenerva.io/*`. Copy the secret into the app env.
+
+## 7. Deploy
+
+Portainer (apps-node) -> Stacks -> Add stack -> Repository:
+
+- compose path `apps-node/apps/metabase/docker-compose.yml`
+- environment from the app `.env`
+- enable automatic Git updates
+
+Traefik picks up the labels within seconds and issues the certificate.
+
+## 8. Register it
+
+- Add the row to the subdomain table in [`03-naming-conventions.md`](03-naming-conventions.md).
+- Add the Redis index (if used) to the table in `core-node/.env.example`.
+- Note it in [`09-roadmap.md`](09-roadmap.md) as done.
+- Commit: `feat/app-metabase`.
+
+## Checklist (copy into the PR)
+
+```
+- [ ] node chosen and correct
+- [ ] database created via create-app-database.sh (or dedicated engine justified)
+- [ ] image version pinned
+- [ ] container_name / compose name follow conventions
+- [ ] mem_limit + healthcheck set
+- [ ] joins edge only (+ apps-internal if sidecars)
+- [ ] Traefik labels + security-headers middleware
+- [ ] DB / Redis / SMTP / OIDC wired to core-node endpoints
+- [ ] Keycloak client created
+- [ ] DNS record added
+- [ ] docs updated (naming, roadmap)
+- [ ] deployed as a Portainer Git stack, cert issued
+```
