@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # =============================================================================
-# check-images.sh :: verify every image tag pinned in the compose files
-# actually resolves on its registry BEFORE you run `make core-up` / `apps-up`.
+# check-images.sh :: DIAGNOSTIC, not a gate. `make core-up` / `apps-up` do NOT
+# run this automatically (it hits the same registry, so under a Docker Hub
+# rate limit it would just fail before the real pull ever gets a chance, which
+# is worse than letting `docker compose up` try and report its own error).
 #
-# This stack pins exact versions (see docs/03-naming-conventions.md); fast-moving
-# projects occasionally remove or never publish a given patch tag, which makes
-# `docker compose up` fail mid-pull with "not found". Run this first, on the
-# server, to catch that in one shot instead of one image at a time.
+# Run this by hand when `core-up`/`apps-up` fails on a pull, to see WHY in one
+# shot instead of guessing image by image: a genuinely missing/renamed tag vs
+# a rate limit / timeout you just need to wait out or fix with `docker login`.
 #
-#   ./scripts/check-images.sh                # checks core-node + apps-node + apps/*
-#   ./scripts/check-images.sh core-node       # checks a single compose file/dir
+#   make check-images-core     # or check-images-apps / check-images
+#   ./scripts/check-images.sh core-node/docker-compose.yml
 # =============================================================================
 source "$(dirname "$0")/lib/common.sh"
 require_cmd docker
@@ -90,5 +91,5 @@ echo
 if [ "$fail" -eq 0 ]; then
   ok "All pinned image tags resolve."
 else
-  die "One or more image tags do not exist on their registry. Fix the tag in the compose file (check the project's Docker Hub / registry page for the current release), then re-run."
+  die "One or more images failed - see the reason under each one above (rate limit / timeout / missing tag)."
 fi

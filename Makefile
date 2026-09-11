@@ -26,10 +26,7 @@ check-images-apps: ## Verify only apps-node's edge-stack image tags (used by app
 core-config: ## Validate the core stack (render merged compose)
 	$(CORE) config -q && echo "core-node/docker-compose.yml OK"
 
-core-up: ## Start / update the core stack (set SKIP_IMAGE_CHECK=1 to bypass the pin check)
-ifndef SKIP_IMAGE_CHECK
-	$(MAKE) check-images-core
-endif
+core-up: ## Start / update the core stack. If it fails on a pull, run 'make check-images-core' to see why.
 	$(CORE) up -d --remove-orphans
 
 core-down: ## Stop the core stack (volumes kept)
@@ -49,10 +46,7 @@ core-ps: ## Show core stack containers
 apps-config: ## Validate the apps-node edge stack
 	$(APPS) config -q && echo "apps-node/docker-compose.yml OK"
 
-apps-up: ## Start / update the apps-node edge stack (set SKIP_IMAGE_CHECK=1 to bypass the pin check)
-ifndef SKIP_IMAGE_CHECK
-	$(MAKE) check-images-apps
-endif
+apps-up: ## Start / update the apps-node edge stack. If it fails on a pull, run 'make check-images-apps' to see why.
 	$(APPS) up -d --remove-orphans
 
 apps-down: ## Stop the apps-node edge stack
