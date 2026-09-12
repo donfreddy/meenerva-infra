@@ -15,7 +15,7 @@ UFW default: `deny incoming`, `allow outgoing`, `allow routed`.
 | 143, 993 | TCP | any | IMAP + IMAPS |
 | 4190 | TCP | any | ManageSieve |
 | 51820 | UDP | apps-node public IP (and data-node later) | WireGuard |
-| 5432, 6379 | TCP | `10.10.0.0/24` **only** | Postgres, Redis (bound to `10.10.0.1`) |
+| 5432, 6379 | TCP | `10.10.0.0/24` **only** | Postgres, Redis (published on 0.0.0.0, restricted by this UFW rule - see D-14) |
 
 ### apps-node
 
@@ -33,8 +33,8 @@ Traefik on `edge`.
 ```
   core-node                                 apps-node
   wg0: 10.10.0.1/24        <== UDP 51820 ==>  wg0: 10.10.0.2/24
-  - binds Postgres :5432   ----------------   - relays outbound mail to 10.10.0.1:587
-  - binds Redis    :6379   ----------------   - connects apps to 10.10.0.1:5432
+  - Postgres :5432 (UFW-restricted)  -------  - relays outbound mail to 10.10.0.1:587
+  - Redis    :6379 (UFW-restricted)  -------  - connects apps to 10.10.0.1:5432
   - Stalwart submission :587                  - connects apps to 10.10.0.1:6379
 ```
 

@@ -7,7 +7,7 @@
 | Rebuild any node from zero in under 30 minutes | Everything is in this repo + off-site backups; bootstrap scripts are idempotent |
 | Add a new open-source app in ~5 minutes | `apps/_template/` + `new-app.sh` + `make app-up` |
 | No single point of failure at the proxy layer | Each node runs its own Traefik and terminates its own TLS |
-| Databases never exposed to the internet | PostgreSQL / Redis bind only to the WireGuard interface |
+| Databases never reachable from outside the mesh | PostgreSQL / Redis published on 0.0.0.0, restricted to `10.10.0.0/24` by UFW (D-14) |
 | Predictable resource usage | Every container has an explicit `mem_limit` and `healthcheck` |
 | Grow to a third node without re-architecting | Role-based repo layout, private mesh, shared conventions |
 
@@ -85,11 +85,18 @@ and/or the WireGuard interface.
 | apps-node | `10.10.0.2` |
 | data-node | `10.10.0.3` (reserved) |
 
-core-node binds its private services to the mesh IP only:
+core-node's private services are reached at the mesh IP:
 
 - `10.10.0.1:5432` - PostgreSQL
 - `10.10.0.1:6379` - Redis
 - `10.10.0.1:587`  - Stalwart submission (apps-node relays outbound mail here)
+
+PostgreSQL and Redis are published on `0.0.0.0` (see D-14: binding Docker's
+port publish to the WireGuard IP specifically turned out to be unreliable) and
+restricted to `10.10.0.0/24` by UFW instead - same practical guarantee
+(unreachable from outside the mesh), enforced at the firewall layer rather
+than the bind address. Always connect to them via the mesh IP regardless;
+UFW is what stops anything else from reaching them.
 
 apps-node reaches identity through the public URL `https://id.meenerva.io` (browser
 redirects require a public URL anyway); all back-channel traffic (token
