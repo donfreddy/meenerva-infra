@@ -20,15 +20,25 @@ timedatectl set-timezone "${TZ_VALUE}" || warn "could not set timezone"
 log "Updating base system"
 export DEBIAN_FRONTEND=noninteractive
 
-# Wait for unattended-upgrades or cloud-init to release apt locks
-while fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock >/dev/null 2>&1; do
-  log "Waiting for apt/dpkg locks to be released..."
-  sleep 5
-done
+# Retry apt directly on failure instead of pre-checking the dpkg lock with
+# fuser/lsof: neither is guaranteed present on a fresh cloud image (fuser
+# ships in psmisc, not installed by default), so a lock-probe loop can pass
+# silently while the lock is actually held - exactly what happened here.
+# unattended-upgrades commonly runs during first boot on a fresh VPS and
+# holds the lock for a few tens of seconds; just wait it out.
+apt_retry() {
+  local attempt=1 max=20
+  until "$@"; do
+    [ "${attempt}" -ge "${max}" ] && die "apt kept failing after ${max} attempts: $*"
+    warn "apt busy (attempt ${attempt}/${max}, likely unattended-upgrades on first boot) - retrying in 15s: $*"
+    sleep 15
+    attempt=$((attempt + 1))
+  done
+}
 
-apt-get update -qq
-apt-get upgrade -y -qq
-apt-get install -y -qq ca-certificates curl gnupg git ufw fail2ban \
+apt_retry apt-get update -qq
+apt_retry apt-get upgrade -y -qq
+apt_retry apt-get install -y -qq ca-certificates curl gnupg git ufw fail2ban \
   unattended-upgrades apache2-utils wireguard wireguard-tools jq
 
 log "Installing Docker CE"
@@ -39,8 +49,8 @@ if ! command -v docker >/dev/null 2>&1; then
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
 https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
     > /etc/apt/sources.list.d/docker.list
-  apt-get update -qq
-  apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  apt_retry apt-get update -qq
+  apt_retry apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   systemctl enable --now docker
   ok "Docker installed: $(docker --version)"
 else
