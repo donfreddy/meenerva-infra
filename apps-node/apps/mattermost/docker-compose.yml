@@ -1,0 +1,77 @@
+# =============================================================================
+# Mattermost (Team Edition) :: chat, on apps-node
+#   chat.meenerva.io
+# Database: app_mattermost on core-postgres (WireGuard). SMTP via Stalwart
+# relay. OIDC/SSO against Keycloak is configured via the System Console after
+# first admin login (see README.md) - not pre-baked via env, to avoid
+# guessing at exact env var names for a flow better verified interactively.
+# =============================================================================
+
+name: meenerva-mattermost
+
+networks:
+  edge:
+    external: true
+
+volumes:
+  mattermost-data:     # file uploads
+  mattermost-config:
+  mattermost-logs:
+  mattermost-plugins:
+  mattermost-client-plugins:
+
+services:
+  mattermost:
+    image: mattermost/mattermost-team-edition:11.11.0
+    container_name: apps-mattermost
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    networks: [edge]
+    environment:
+      TZ: ${TZ}
+
+      # --- database (shared core-postgres over WireGuard) ---
+      MM_SQLSETTINGS_DRIVERNAME: postgres
+      MM_SQLSETTINGS_DATASOURCE: "postgres://app_mattermost:${MATTERMOST_DB_PASSWORD}@${CORE_DB_HOST}:${CORE_DB_PORT}/app_mattermost?sslmode=disable&connect_timeout=10"
+
+      # --- site ---
+      MM_SERVICESETTINGS_SITEURL: "https://chat.${PRIMARY_DOMAIN}"
+      MM_SERVICESETTINGS_ENABLELOCALMODE: "false"
+
+      # --- outbound mail (Stalwart relay on core-node) ---
+      MM_EMAILSETTINGS_SENDEMAILNOTIFICATIONS: "true"
+      MM_EMAILSETTINGS_ENABLESMTPAUTH: "true"
+      MM_EMAILSETTINGS_SMTPSERVER: ${CORE_SMTP_HOST}
+      MM_EMAILSETTINGS_SMTPPORT: ${CORE_SMTP_PORT}
+      MM_EMAILSETTINGS_SMTPUSERNAME: ${MAIL_FROM}
+      MM_EMAILSETTINGS_SMTPPASSWORD: ${MAIL_FROM_PASSWORD}
+      MM_EMAILSETTINGS_CONNECTIONSECURITY: STARTTLS
+      MM_EMAILSETTINGS_FEEDBACKEMAIL: ${MAIL_FROM}
+      MM_EMAILSETTINGS_REPLYTOADDRESS: ${MAIL_FROM}
+      MM_EMAILSETTINGS_FEEDBACKNAME: "MEENERVA Chat"
+
+      # --- first admin is created via the web setup wizard on first visit ---
+    volumes:
+      - mattermost-data:/mattermost/data
+      - mattermost-config:/mattermost/config
+      - mattermost-logs:/mattermost/logs
+      - mattermost-plugins:/mattermost/plugins
+      - mattermost-client-plugins:/mattermost/client/plugins
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: edge
+      traefik.http.routers.mattermost.rule: Host(`chat.${PRIMARY_DOMAIN}`)
+      traefik.http.routers.mattermost.entrypoints: websecure
+      traefik.http.routers.mattermost.tls.certresolver: letsencrypt
+      traefik.http.routers.mattermost.middlewares: security-headers@file
+      traefik.http.services.mattermost.loadbalancer.server.port: "8065"
+    healthcheck:
+      # The image's own Dockerfile uses mmctl, not curl/wget - it may not be
+      # present in this image at all (see the Portainer lesson: never assume
+      # a shell tool exists without checking, D-... in docs/02).
+      test: ["CMD", "/mattermost/bin/mmctl", "system", "status", "--local"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    mem_limit: 1024m
