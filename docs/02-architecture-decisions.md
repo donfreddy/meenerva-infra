@@ -365,3 +365,43 @@ add it to `edge` too.
   containment property that network exists for (see D-04), for every service
   on it, not just the two that needed publishing. Adding just postgres/redis
   to `edge` is the narrower fix.
+
+---
+
+## D-15 - Remove Portainer entirely (supersedes the "keep as dashboard" part of D-12)
+
+**Context.** D-12 kept Portainer installed on core-node after dropping its
+GitOps role, reasoning it might still earn its ~512 MB as a visual status
+dashboard. Once core-node was actually live and reachable, that fallback value
+never materialized either: across the full Phase 1 bring-up and every
+incident handled afterward (Stalwart lockouts, the n8n DB password mismatch,
+the WireGuard/Docker port-publish saga in D-14, ...), status and logs were
+checked with `docker compose ps` / `docker logs` / `docker inspect` every
+single time, never once through the Portainer UI - including after it was
+live and working. Separately, `portainer.meenerva.io` triggered a Chrome
+"Dangerous site" (Google Safe Browsing) warning (see D-12's aside), and the
+attempt to also connect apps-node to it (D-12 anticipated this) hit the same
+class of Docker port-publish issue as D-14, or would have required switching
+to Portainer's Edge mode and opening a new port (8000) on core-node for a
+feature that, again, had not been used once.
+
+**Decision.** Remove Portainer from core-node entirely (the service, its
+Traefik router, and the `portainer-data` volume) and drop the never-deployed
+`portainer-agent` from apps-node (removed slightly earlier, same reasoning).
+No replacement dashboard - `docker compose ps`, `docker logs`, `docker
+inspect` over SSH are the monitoring workflow, matching how every incident in
+this repo's history was actually diagnosed.
+
+**Consequences.** Frees ~512 MB on core-node (meaningful on a 12 GB node) and
+removes a public route that had already drawn one unrelated-but-real
+blocklist flag. No visual container browser for anyone less comfortable with
+the CLI - acceptable for a one-operator studio at this stage; revisit if a
+team member without SSH access needs read-only visibility later (a lighter,
+read-only tool - e.g. a simple `docker events`/`ps` status page - would be a
+smaller footprint than Portainer for that narrow need).
+
+**Rejected alternative - keep it "just in case":** the same reasoning was
+already applied once in D-12 and the anticipated value did not show up even
+with the tool live, accessible, and unremoved for the entire rest of Phase 1 -
+carrying it further on hope alone was not worth the RAM and the public
+attack surface.

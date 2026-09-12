@@ -7,8 +7,7 @@
 - Only `*.env.example` is committed. `*.env`, `*.conf`, `acme.json`, `wg-keys/` are
   git-ignored.
 - Real values live in **two places only**: the per-node `.env` on the server, and a
-  team password manager (Bitwarden / Vaultwarden / 1Password). Portainer stack
-  environments count as "on the server".
+  team password manager (Bitwarden / Vaultwarden / 1Password).
 - Generate: `openssl rand -base64 36`. For consumers that reject `+ / =`
   (some connection strings), use `openssl rand -hex 32`.
 - One secret = one purpose. Never reuse the Postgres superuser password for an app.
@@ -88,7 +87,7 @@ Stop it (`Ctrl+C`) when done - it is not meant to stay running.
   core-postgres ──(nightly 02:00, pg_dump per DB)──► /opt/meenerva-infra/backups/pg/*.sql.gz
        │                                                        │
   named volumes (stalwart-data, n8n-data,        ┌──────────────┘
-  portainer-data, traefik-acme)                  │
+  webmail-data, traefik-acme)                    │
        │                                         ▼
        └────────► offen/docker-volume-backup ──► Backblaze B2 (encrypted, restic-compatible)
                                                   bucket: meenerva-backups

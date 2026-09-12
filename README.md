@@ -2,8 +2,9 @@
 
 Infrastructure-as-Code for the **MEENERVA** startup studio. Self-hosted, open-source
 SaaS tooling deployed with Docker Compose over SSH (`git pull` + `docker compose
-up -d`, see decision D-12), version-controlled here. Portainer is installed on
-core-node as a visual status dashboard, not as the deployment mechanism.
+up -d`, see decision D-12), version-controlled here. No Portainer: it added no
+real value even installed and reachable, and was removed (D-15) - status and
+logs come from `docker compose ps` / `docker logs`.
 
 This repository is the single source of truth. If a server is lost, it can be rebuilt
 from a blank Ubuntu image using only the scripts and compose files in this repo plus
@@ -17,7 +18,7 @@ Two Contabo VPS instances today, a third planned.
 
 | Logical node | Hardware (today)            | Role                                             | Public subdomains |
 |--------------|-----------------------------|-------------------------------------------------|-------------------|
-| `core-node`  | Contabo Cloud VPS 6 (6 vCPU / 12 GB RAM / 200 GB) | Edge routing, identity, mail, automation, shared data stores | `traefik.` `portainer.` `id.` `mail.` `webmail.` `autoconfig.` `n8n.` |
+| `core-node`  | Contabo Cloud VPS 6 (6 vCPU / 12 GB RAM / 200 GB) | Edge routing, identity, mail, automation, shared data stores | `traefik.` `id.` `mail.` `webmail.` `autoconfig.` `n8n.` |
 | `apps-node`  | Contabo Cloud VPS 8 (8 vCPU / 24 GB RAM / 300 GB) | Business and collaboration applications          | `cloud.` `office.` `chat.` `project.` `sign.` `erp.` |
 | `data-node`  | _not provisioned yet_        | SIEM, analytics, business intelligence (Wazuh, PostHog, Metabase, ClickHouse) | `siem.` `analytics.` `bi.` |
 
@@ -42,7 +43,7 @@ reachable.
   - n8n (n8n.)                              - OpenProject (project.)
   - PostgreSQL 16 (private, :5432 on wg)    - ERPNext, DocuSeal, ...
   - Redis (private, :6379 on wg)
-  - Portainer + backups
+  - backups
 ```
 
 ---
@@ -109,14 +110,14 @@ Full detail in [`docs/07-deployment-guide.md`](docs/07-deployment-guide.md). Sum
    ./scripts/create-app-database.sh n8n
    ./scripts/create-app-database.sh stalwart   # only if using the SQL backend
    ```
-6. **Verify**: `https://traefik.meenerva.io`, `https://portainer.meenerva.io`,
-   `https://id.meenerva.io`, `https://mail.meenerva.io`, `https://webmail.meenerva.io`.
+6. **Verify**: `https://traefik.meenerva.io`, `https://id.meenerva.io`,
+   `https://mail.meenerva.io`, `https://webmail.meenerva.io`.
 7. **Bring up apps-node** later with `./scripts/init-apps-node.sh` +
    `./scripts/setup-wireguard.sh`, then deploy apps from `apps-node/apps/`.
 
 After the first manual launch, every subsequent change is deployed with
 `git pull` + `make core-up` / `make apps-up` / `make app-up NAME=<app>` over
-SSH on the node that owns the change (decision D-12) - not through Portainer.
+SSH on the node that owns the change (decisions D-12/D-15).
 
 ---
 

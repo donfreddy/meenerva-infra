@@ -10,7 +10,7 @@ apps `203.0.113.20`.
 | Name | Type | Value | Notes |
 |------|------|-------|-------|
 | `meenerva.io` | A | `203.0.113.10` | apex -> core (landing / redirect) |
-| `traefik` `portainer` `id` `mail` `webmail` `n8n` | A | `203.0.113.10` | core-node |
+| `traefik` `id` `mail` `webmail` `n8n` | A | `203.0.113.10` | core-node |
 | `autoconfig` `autodiscover` | CNAME | `mail.meenerva.io.` | mail client discovery |
 | `cloud` `office` `chat` `project` `sign` `erp` | A | `203.0.113.20` | apps-node |
 | `*` (optional wildcard) | A | `203.0.113.20` | catch-all for new apps-node apps |

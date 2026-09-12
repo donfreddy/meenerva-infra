@@ -41,7 +41,7 @@ Minimum to start: `PRIMARY_DOMAIN`, `ACME_EMAIL`, all `*_PASSWORD`, all `*_KEY`,
 
 ```sh
 make core-config      # validate
-make core-up          # start Traefik, Portainer, Postgres, Redis, Keycloak, Stalwart, Bulwark Webmail, n8n, backups
+make core-up          # start Traefik, Postgres, Redis, Keycloak, Stalwart, Bulwark Webmail, n8n, backups
 make core-ps
 ```
 
@@ -69,14 +69,13 @@ make core-up          # re-applies; Keycloak / n8n reconnect
 
 | Service | URL | Action |
 |---------|-----|--------|
-| Portainer | `https://portainer.meenerva.io` | set admin password within 5 min of first boot |
 | Traefik | `https://traefik.meenerva.io` | log in with `TRAEFIK_DASHBOARD_AUTH`; confirm routers are green |
 | Keycloak | `https://id.meenerva.io` | log in as admin, create realm `meenerva`, set SMTP (`core-stalwart:587`), enable MFA policy, create the `webmail` client (confidential, redirect `https://webmail.meenerva.io/*`) and put its secret in `core-node/.env` |
 | Stalwart | `https://mail.meenerva.io` | add domain, publish DKIM, create `no-reply@` and user mailboxes, set relay |
 | Bulwark Webmail | `https://webmail.meenerva.io` | log in (Keycloak SSO or mailbox password), send a test to mail-tester.com |
 | n8n | `https://n8n.meenerva.io` | create owner account, set SMTP, import baseline workflows |
 
-## Step 6 - Ongoing deploys (no Portainer GitOps - see D-12)
+## Step 6 - Ongoing deploys (no Portainer - see D-12/D-15)
 
 Every change after the initial bring-up follows the same two commands, on the
 node that owns the change:
@@ -87,12 +86,13 @@ git pull
 make core-up          # or: make apps-up / make app-up NAME=<app>
 ```
 
-Portainer stays installed and shows the running stacks/containers (useful for a
-quick visual check of status, logs, resource usage), but it does not deploy
-anything - decision D-12 in
-[`02-architecture-decisions.md`](02-architecture-decisions.md) covers why the
-originally-planned "Stacks -> Repository" GitOps flow was dropped after Phase 1
-bring-up showed every real fix went through direct SSH regardless.
+No Portainer anywhere in this stack: it was originally meant to provide both a
+GitOps deploy flow and a visual status dashboard, but D-12 dropped the GitOps
+role after Phase 1 bring-up showed every real fix went through direct SSH
+regardless, and D-15 then removed it entirely once the "just a dashboard"
+fallback also went unused, plus it drew a public Safe Browsing flag. Status
+and logs come from `docker compose ps` / `docker logs`, as used throughout
+this guide.
 
 ## Step 7 - Bring up apps-node
 

@@ -29,8 +29,8 @@ Docs and examples use `meenerva.io`. Replace with the real primary domain in
 `<node>-<service>`:
 
 ```
-core-traefik   core-portainer   core-postgres   core-redis
-core-keycloak  core-stalwart    core-webmail    core-n8n
+core-traefik   core-postgres   core-redis
+core-keycloak  core-stalwart   core-webmail   core-n8n
 apps-traefik   apps-nextcloud   apps-collabora  apps-mattermost
 ```
 
@@ -52,7 +52,6 @@ One subdomain per user-facing service, `<service>.meenerva.io`.
 | Subdomain | Points to | Service |
 |-----------|-----------|---------|
 | `traefik.` | core | Traefik dashboard (auth-protected) |
-| `portainer.` | core | Portainer |
 | `id.` | core | Keycloak |
 | `mail.` | core | Stalwart admin UI + JMAP + autoconfig |
 | `webmail.` | core | Bulwark Webmail (native JMAP client) |
@@ -113,4 +112,5 @@ Router and service names = the app slug. Shared middlewares are referenced from
 ## Git branches
 
 `main` is deployed. Work on `feat/<slug>` or `fix/<slug>`, open a PR, merge to
-`main`, Portainer redeploys.
+`main`, then `git pull` + `make core-up`/`apps-up`/`app-up` on the affected
+node (D-12/D-15: no Portainer GitOps).

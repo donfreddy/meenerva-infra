@@ -25,7 +25,6 @@ that other services depend on.
 | Service | Image | Purpose | mem_limit |
 |---------|-------|---------|-----------|
 | Traefik v3 | `traefik:v3.7.13` | Edge reverse proxy, ACME TLS, HTTP->HTTPS | 192 MB |
-| Portainer CE | `portainer/portainer-ce` | Status dashboard only (containers, logs, resource usage) - not the deployment mechanism, see D-12 | 512 MB |
 | PostgreSQL 16 | `postgres:16-alpine` | Shared relational database, one DB+user per app | 3 GB |
 | Redis 7 | `redis:7-alpine` | Shared cache / queue backend | 384 MB |
 | Keycloak 26 | `quay.io/keycloak/keycloak` | Central identity provider (OIDC / SAML), MFA | 1.25 GB (heap capped) |
@@ -160,7 +159,6 @@ and D-11, and [`05-dns-and-mail.md`](05-dns-and-mail.md).
 | Relational data (Keycloak, n8n, Nextcloud, ...) | `core-postgres` volume | Nightly `pg_dump` per DB, then B2 |
 | Mailboxes + mail metadata | `stalwart-data` volume | Nightly volume snapshot to B2 |
 | Traefik ACME certs | `traefik-acme` volume (each node) | B2 (small, low priority - regenerable) |
-| Portainer config | `portainer-data` volume | B2 |
 | n8n encryption key, credentials | `.env` + `n8n-data` volume | `.env` in a password manager; volume to B2 |
 | Nextcloud user files | `apps-node` volume / object storage | Nextcloud-side backup + B2 |
 
@@ -172,8 +170,9 @@ Restore procedure: [`06-secrets-and-backups.md`](06-secrets-and-backups.md).
    `init-<role>-node.sh`, then `make core-up` / `make apps-up` for the edge stack.
 2. **Everything after that:** `git pull` then `make core-up` / `make apps-up` /
    `make app-up NAME=<app>`, over SSH on the node that owns the change. No
-   Portainer GitOps - decision D-12 covers why that was dropped after Phase 1
-   showed every real fix needed direct SSH access anyway. Portainer stays
-   installed as a status dashboard only.
+   Portainer anywhere in the stack (D-12 dropped its GitOps role after Phase 1
+   showed every real fix needed direct SSH regardless; D-15 then removed it
+   entirely, since the "status dashboard" fallback went unused too). Status
+   and logs come from `docker compose ps` / `docker logs`.
 3. **Secrets** live in a per-node `.env` (git-ignored, never committed), not in
    the repo.

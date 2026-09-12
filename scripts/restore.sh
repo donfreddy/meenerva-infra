@@ -43,7 +43,7 @@ restore_full() {
   confirm "Proceed?" || die "aborted"
 
   # Volumes
-  for vol in stalwart-data n8n-data portainer-data traefik-acme; do
+  for vol in stalwart-data n8n-data traefik-acme; do
     src="${WORK}/extract/backup/${vol}"
     [ -d "${src}" ] || { warn "no ${vol} in snapshot, skipping"; continue; }
     log "Restoring volume ${vol}"

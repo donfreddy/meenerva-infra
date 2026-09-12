@@ -6,7 +6,7 @@ the next starts. `[ ]` todo, `[~]` in progress, `[x]` done.
 ## Phase 1 - Infrastructure + Identity + Mail  (core-node)
 
 - [ ] bootstrap-node.sh + init-core-node.sh
-- [ ] Traefik v3 + Portainer
+- [ ] Traefik v3
 - [ ] PostgreSQL 16 (shared) + Redis
 - [ ] Keycloak realm `meenerva`, MFA policy, SMTP
 - [ ] Stalwart Mail: domain, DKIM/SPF/DMARC, mailboxes, outbound relay
