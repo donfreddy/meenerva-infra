@@ -169,6 +169,24 @@ signs, add their DKIM selector too (multi-signature is fine).
 Start with **Internal** (the wizard default) and switch backend later from the
 admin UI - no rebuild or redeploy needed, it is a live setting change.
 
+**Current state (attempted during Phase 1, not completed):** a `Keycloak SSO`
+OIDC directory object exists in Stalwart (Settings -> Directories, Issuer
+`https://id.meenerva.io/realms/meenerva`, Username Claim `email`, Required
+Audience left blank), but **Settings -> Authentication -> Authentication
+Directory is back to blank/Internal** - the OIDC directory is defined but not
+active. Setting it as the active Authentication Directory did not make
+Bulwark's SSO work end-to-end: Keycloak login completed and returned a valid
+code, but Bulwark's subsequent call to `GET /jmap/session` with the resulting
+token got a `401` from Stalwart ("token may be expired"), and `docker logs
+core-stalwart` showed nothing at all about the rejection even at the default
+log level - the exact cause (audience mismatch, a Stalwart bug, or something
+else) was not root-caused. Do not re-enable the Authentication Directory
+without first raising Stalwart's log verbosity (debug/trace) so the rejection
+is actually visible; re-enabling it blind risks also breaking the
+already-working IMAP app-password logins (Nextcloud Mail) if it turns out to
+replace the internal directory check entirely rather than sitting alongside
+it - this was not verified before reverting.
+
 ## 5. Mail clients (dual access - decision D-11)
 
 Stalwart is the single source of truth. Two web clients present the **same
@@ -178,6 +196,15 @@ mailboxes**, picked by use case:
 |--------|-------|-----------|
 | **Nextcloud Mail** | apps-node, `cloud.meenerva.io` -> *Mail* | primary client for business users - email next to files, calendar, Talk, tasks |
 | **Bulwark Webmail** | core-node, `webmail.meenerva.io` | fast native JMAP client (mail + calendar + contacts + files); standalone/fallback, works when apps-node is down |
+
+**Auth note:** both clients currently log in with a Stalwart **app password**
+per user, not SSO end-to-end. Nextcloud's own login is Keycloak SSO, but its
+Mail app still authenticates to Stalwart over IMAP with an app password
+underneath - this is normal (Gmail/Office 365 do the same for IMAP/SMTP).
+Bulwark shows a "Login with Keycloak" option (`WEBMAIL_OAUTH_ENABLED=true`,
+kept visible for future use) but it does not currently complete
+successfully - see section 4 above; use the app-password login form on
+Bulwark's login page instead for now.
 
 Both are stateless: a change in one shows in the other (and on phones) within
 seconds, because mailbox state lives in Stalwart.
