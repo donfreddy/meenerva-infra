@@ -266,6 +266,11 @@ services:
       PORT: "3000"
       JMAP_SERVER_URL: https://${STALWART_ADMIN_HOST}
       SESSION_SECRET: ${WEBMAIL_SESSION_SECRET}
+      # Traefik terminates TLS and forwards plain HTTP to this container;
+      # without this, the "pending" SSO cookie set during the OAuth redirect
+      # is not marked Secure and the callback can fail to find it ("SSO
+      # complete: no pending cookie found").
+      COOKIE_SECURE: "true"
       # SSO via Keycloak (endpoints auto-discovered from the issuer). Start with
       # WEBMAIL_OAUTH_ENABLED=false (password login against Stalwart), then set it
       # to true once the Keycloak `webmail` client exists and redeploy.
