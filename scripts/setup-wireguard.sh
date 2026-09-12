@@ -55,10 +55,31 @@ add_peer() {
   [ -n "$name" ] && [ -n "$pubkey" ] && [ -n "$endpoint_ip" ] || die "usage: add-peer <name> <pubkey> <endpoint-ip>"
   local peer_ip="${MESH_IP[$name]:-}"
   [ -n "$peer_ip" ] || die "unknown peer name: $name"
-  if grep -q "${pubkey}" "${WG_CONF}" 2>/dev/null; then
-    ok "peer ${name} already present"
+
+  # A valid WireGuard key is 32 raw bytes, base64-encoded to exactly 44
+  # characters ending in '=' - catch a truncated copy-paste here instead of
+  # letting wg-quick fail after the config is already rewritten (it did,
+  # live, on a key missing its trailing '=').
+  [[ "${pubkey}" =~ ^[A-Za-z0-9+/]{43}=$ ]] || die "'${pubkey}' (${#pubkey} chars) is not a valid WireGuard public key - should be 44 characters ending in '='. Re-copy it from the peer node (cat /etc/wireguard/publickey) - a common failure mode is losing the trailing '=' in a terminal copy-paste."
+
+  if grep -qF "${pubkey}" "${WG_CONF}" 2>/dev/null; then
+    ok "peer ${name} already present with this exact key"
     return 0
   fi
+
+  # Replace any existing block for this peer name (e.g. re-running after a
+  # bad key was corrected) instead of appending a duplicate stale [Peer].
+  if grep -q "^# --- ${name} ---$" "${WG_CONF}" 2>/dev/null; then
+    awk -v marker="# --- ${name} ---" '
+      $0 == marker { skip=1; next }
+      skip && /^\[Peer\]/ { next }
+      skip && /^$/ { skip=0; next }
+      skip { next }
+      { print }
+    ' "${WG_CONF}" > "${WG_CONF}.tmp" && mv "${WG_CONF}.tmp" "${WG_CONF}"
+    warn "replaced the existing block for peer ${name}"
+  fi
+
   cat >> "${WG_CONF}" <<EOF
 
 # --- ${name} ---
