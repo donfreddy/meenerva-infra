@@ -16,7 +16,6 @@ ufw allow 80/tcp    comment 'traefik http'
 ufw allow 443/tcp   comment 'traefik https'
 ufw allow 51820/udp comment 'wireguard'
 ufw allow from "${MESH_SUBNET}" to any port 22   proto tcp comment 'ssh (mesh)'
-ufw allow from "${MESH_SUBNET}" to any port 9001 proto tcp comment 'portainer agent (mesh)'
 ufw reload
 ok "firewall configured"
 
