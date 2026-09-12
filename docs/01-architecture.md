@@ -127,6 +127,9 @@ apps-node app ──(client_credentials / introspection, over mesh or public)─
 
 Keycloak realm `meenerva`, one confidential client per application. Groups drive
 RBAC. n8n orchestrates account lifecycle (create on hire, disable on termination).
+Full detail - realm settings, the clients registry, service accounts for
+automation, and the onboarding/offboarding shape - in
+[`10-identity-keycloak.md`](10-identity-keycloak.md).
 
 ## 5. Mail flow
 

@@ -146,3 +146,4 @@ See [`docs/03-naming-conventions.md`](docs/03-naming-conventions.md). In short:
 | [`docs/07-deployment-guide.md`](docs/07-deployment-guide.md) | Step-by-step first deployment |
 | [`docs/08-adding-an-app.md`](docs/08-adding-an-app.md) | The 5-minute new-application workflow |
 | [`docs/09-roadmap.md`](docs/09-roadmap.md) | Phased rollout of the application catalogue |
+| [`docs/10-identity-keycloak.md`](docs/10-identity-keycloak.md) | Realm structure, groups/RBAC, clients registry, onboarding/offboarding, troubleshooting |
