@@ -340,7 +340,7 @@ services:
       N8N_PORT: "5678"
       N8N_PROTOCOL: https
       NODE_ENV: production
-      WEBHOOK_URL: https://${N8N_HOST}/
+      N8N_WEBHOOK_URL: https://${N8N_HOST}/    # WEBHOOK_URL is deprecated as of n8n 2.x
       N8N_EDITOR_BASE_URL: https://${N8N_HOST}/
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
       N8N_DIAGNOSTICS_ENABLED: "false"
