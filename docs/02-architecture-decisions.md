@@ -260,3 +260,34 @@ would have required either standing up a second, differently-named stack
 existing one into Portainer's model, for a benefit (saving `git pull && up -d`)
 that does not offset the migration risk or the loss of directness when
 debugging - shown repeatedly during Phase 1 bring-up to require SSH regardless.
+
+---
+
+## D-13 - No web-based database admin tool (pgAdmin/Adminer) for now
+
+**Context.** The original plan (see `gemini.md`) included pgAdmin next to
+`core-postgres`. Every actual database task during Phase 1 bring-up (creating
+per-app roles/databases, wiping `app_keycloak`, ad-hoc lookups) was done with
+`docker exec -it core-postgres psql -U <user> -d <db>` or
+`scripts/create-app-database.sh`, and that covered everything needed.
+
+**Decision.** Do not add a permanent database UI to the core stack.
+`core-postgres` stays reachable only via `psql` over `docker exec` (or, from
+apps-node, a Postgres client pointed at `10.10.0.1:5432`). Same reasoning as
+D-12: a web UI here would need its own Traefik route and authentication to
+expose safely (the database itself is deliberately not internet-facing, see
+`core-node/docker-compose.yml`), for a workflow that plain `psql` already
+covers.
+
+**Consequences.** No extra always-on service (RAM, attack surface, one more
+thing to patch). Exploring data visually (e.g. browsing table contents rather
+than writing `SELECT`s) is less convenient than a GUI would be. If that becomes
+a real need later, the lightweight fallback is **Adminer** run on-demand (a
+single-file ~50 MB image, `docker run --rm --network core-internal -p
+8081:8080 adminer`, connect to `core-postgres`, stop it when done) rather than
+a permanent pgAdmin service - covers the same "I want to look at this table"
+need without a standing footprint.
+
+**Rejected alternative - permanent pgAdmin in the core stack:** ~300-500 MB RAM
+on a 12 GB node for a capability plain `psql` already provides for everything
+done so far, plus a public route to secure and maintain.

@@ -31,8 +31,35 @@
 ### Future: move to a secret manager
 
 When Phase 1 identity is stable, introduce **Infisical** or **Vault** on core-node
-and have Portainer / compose pull secrets at deploy time. Not required now; the
-`.env` + password-manager model is fine for two nodes and one operator.
+and have `docker compose` pull secrets at deploy time instead of a plain `.env`.
+Not required now; the `.env` + password-manager model is fine for two nodes and
+one operator.
+
+### Database access (no GUI, see decision D-13)
+
+`core-postgres` is not internet-facing and has no web admin UI. Use `psql`:
+
+```sh
+# on core-node, as the superuser
+docker exec -it core-postgres psql -U "$POSTGRES_USER" -d postgres
+
+# a specific app's own database, as its own role
+docker exec -it core-postgres psql -U app_n8n -d app_n8n
+```
+
+From apps-node (or any machine on the WireGuard mesh), point a regular Postgres
+client at `10.10.0.1:5432` with the app's own role/database credentials.
+
+Need to browse tables visually just once? Run **Adminer** on demand rather than
+adding a permanent service:
+
+```sh
+docker run --rm --network core-internal -p 127.0.0.1:8081:8080 adminer
+# ssh -L 8081:localhost:8081 root@<core-ip>, then open http://localhost:8081
+# System: PostgreSQL, Server: core-postgres, then your usual user/db/password
+```
+
+Stop it (`Ctrl+C`) when done - it is not meant to stay running.
 
 ## Backups
 
