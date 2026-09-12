@@ -320,30 +320,48 @@ nothing was listening there from the network's point of view. Diagnosis:
   not the cause - `DOCKER-USER`/`ufw-*` forward chains had no relevant DROP
   hit.
 
-This reproduces a known class of Docker issue: publishing a container port
-bound to a secondary IP added to the host (here, by `wg-quick`) after normal
-interfaces are up is unreliable - Docker can accept the config and simply
-never create the corresponding NAT rule, with no error surfaced anywhere
-(container logs, `docker compose up` output, and `journalctl -u docker` were
-all silent about it).
+Switching the bind from `10.10.0.1:5432` to plain `0.0.0.0:5432` (first fix
+attempted) made **no difference** - `iptables -t nat -L DOCKER` was still
+completely empty for both ports after a fresh recreate. The real variable
+turned out to be network membership, not bind address: `postgres` and `redis`
+were the only services whose **sole** network is `core-internal`, which is
+declared `internal: true` (no route to the outside world, by design - see
+D-04's Docker-networks table). Every other service with a working published
+port (Traefik, Portainer, Keycloak, Stalwart, Bulwark, n8n) is also on `edge`,
+a normal bridge network. This matches a confirmed, long-standing Docker
+limitation: **a container cannot have a working published port if its only
+network is `internal: true`** - Docker does not create the DNAT rule for it at
+all, silently (tracked as
+[moby/moby#36174](https://github.com/moby/moby/issues/36174)). No amount of
+bind-address tweaking, container recreation, or daemon restart works around
+this; it does not depend on the bind IP.
 
-**Decision.** Publish `5432` and `6379` on `0.0.0.0` (like Traefik and Stalwart
-already do, which work) and rely on the **UFW** rule restricting source IPs to
-`10.10.0.0/24` for the actual access control, instead of the Docker bind
-address. Same practical guarantee - unreachable from outside the mesh - now
-enforced at the firewall layer, which is demonstrably reliable here, rather
-than a Docker port-publish mechanism that is not.
+**Decision.** Join `postgres` and `redis` to `edge` as well (`networks: [edge,
+core-internal]`, matching every other service), publish `5432`/`6379` on
+`0.0.0.0`, and rely on the **UFW** rule restricting source IPs to
+`10.10.0.0/24` for the actual access control - not network membership, not
+bind address. `edge` membership only makes Docker willing to create the DNAT
+rule; it grants no HTTP route (no Traefik labels are set on these services)
+and no additional exposure beyond what the published port + UFW already
+governs.
 
 **Consequences.** The port technically exists on the public interface at the
 OS level, but UFW drops/rejects anything not sourced from `10.10.0.0/24`
 before it reaches Postgres/Redis - verified equivalent to the original intent.
 Removed `POSTGRES_WG_BIND_IP`/`REDIS_WG_BIND_IP` from `core-node/.env.example`
-(no longer used). Always still connect to these services via the mesh IP
-(`10.10.0.1`) from apps-node, not the public IP - only the *bind* address
-changed, not the intended access path or the naming convention.
+(no longer used - the bind address was never the actual variable). Always
+still connect to these services via the mesh IP (`10.10.0.1`) from apps-node,
+not the public IP - only which Docker network reaches them changed, not the
+intended access path or naming convention. Any future service that needs a
+published port and is currently `core-internal`-only will hit the same wall;
+add it to `edge` too.
 
-**Rejected alternative - keep debugging the Docker IP-bind:** tried a fresh
-container recreate, a full daemon restart, and both orderings of the two;
-none produced a NAT rule. Continuing to chase this with no error message to
-go on was judged lower-value than switching to a mechanism (UFW) already
-proven to work correctly in this exact deployment.
+**Rejected alternatives:**
+- *Keep debugging the IP-bind specifically* - abandoned once switching to
+  `0.0.0.0` alone (no network change) also produced zero NAT rules, proving
+  bind address was never the actual cause.
+- *Drop `internal: true` from `core-internal` instead* - would restore port
+  publishing for any container on it, but removes the "no internet egress"
+  containment property that network exists for (see D-04), for every service
+  on it, not just the two that needed publishing. Adding just postgres/redis
+  to `edge` is the narrower fix.

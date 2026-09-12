@@ -106,12 +106,16 @@ introspection, DB, cache, SMTP) goes over the mesh.
 
 | Network | Scope | Members |
 |---------|-------|---------|
-| `edge` | bridge, attachable | Traefik + any container that needs an HTTP route |
+| `edge` | bridge, attachable | Traefik + any container that needs an HTTP route, **plus PostgreSQL and Redis** (D-14: a container whose only network is `internal: true` cannot have a working published port - Docker never creates the DNAT rule, see [moby/moby#36174](https://github.com/moby/moby/issues/36174)) |
 | `core-internal` | bridge, `internal: true` | PostgreSQL, Redis, Keycloak, n8n, Stalwart, backups (Bulwark Webmail is on `edge` only - it reaches Stalwart via the public JMAP URL) |
 
 `core-internal` has no gateway to the internet, so a compromised app container
-cannot exfiltrate directly. Cross-node database access is via the host mesh IP, not
-a shared Docker network.
+cannot exfiltrate directly. PostgreSQL and Redis being multi-homed onto `edge`
+too does not change this for the *other* `core-internal`-only containers, and
+does not add an HTTP route for postgres/redis themselves (no Traefik labels are
+set on them) - their actual exposure is governed by UFW (D-14), not network
+membership. Cross-node database access is via the host mesh IP, not a shared
+Docker network.
 
 ## 4. Identity flow
 

@@ -112,20 +112,20 @@ services:
   # ===========================================================================
   # PostgreSQL 16 :: shared database, one DB + role per app (see postgres/initdb)
   #
-  # Published on 0.0.0.0, NOT bound to the WireGuard IP specifically: Docker's
-  # iptables DNAT rule for a port bound to a secondary IP added to the host
-  # after the interface (wg0/10.10.0.1) was created reproducibly never gets
-  # created (confirmed empty `iptables -t nat -L DOCKER`, across a container
-  # recreate AND a full dockerd restart, in both orders). Access is instead
-  # restricted at the firewall: UFW's `5432/tcp ALLOW IN 10.10.0.0/24` (see
-  # init-core-node.sh) already rejects anything outside the mesh subnet, which
-  # is the same practical guarantee the IP-bind was meant to provide.
+  # Published on 0.0.0.0 (D-14): a container reachable only through a network
+  # with `internal: true` can never have its published ports actually work -
+  # Docker does not create the DNAT rule for containers whose sole network is
+  # internal (moby/moby#36174), no matter what host IP the port is bound to.
+  # Hence `edge` here too (like Keycloak/n8n/Stalwart), even though this
+  # service has no HTTP route through Traefik. Real access control is UFW's
+  # `5432/tcp ALLOW IN 10.10.0.0/24` (see init-core-node.sh), not network
+  # membership or bind address.
   # ===========================================================================
   postgres:
     image: postgres:16-alpine
     container_name: core-postgres
     restart: unless-stopped
-    networks: [core-internal]
+    networks: [edge, core-internal]
     ports:
       - "5432:5432"   # public bind; UFW restricts source IPs to 10.10.0.0/24
     environment:
@@ -159,13 +159,14 @@ services:
 
   # ===========================================================================
   # Redis 7 :: shared cache / queue backend. Password-protected.
-  # Public bind + UFW mesh restriction, same reasoning as postgres above.
+  # On `edge` too, same reason as postgres above (D-14): a container whose only
+  # network is `internal: true` can never have its published ports work.
   # ===========================================================================
   redis:
     image: redis:7-alpine
     container_name: core-redis
     restart: unless-stopped
-    networks: [core-internal]
+    networks: [edge, core-internal]
     ports:
       - "6379:6379"   # public bind; UFW restricts source IPs to 10.10.0.0/24
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
