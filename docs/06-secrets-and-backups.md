@@ -43,12 +43,30 @@ one operator.
 # on core-node, as the superuser
 docker exec -it core-postgres psql -U "$POSTGRES_USER" -d postgres
 
-# a specific app's own database, as its own role
+# a specific app's own database, as its own role (interactive login shell)
 docker exec -it core-postgres psql -U app_n8n -d app_n8n
 ```
 
+> **This does NOT verify an app's actual password.** Without `-h`, `psql`
+> connects over the local Unix socket, which the official Postgres image
+> authenticates with `trust` (no password check at all) regardless of what you
+> type. This produced a false "it works" during a real n8n outage where the
+> role's real (network) password had drifted from what was in `.env` - the
+> socket login above happily succeeded throughout. To actually test the
+> credential an app will use, connect the same way the app does: over the
+> Docker network, by hostname, from a **different** container:
+> ```sh
+> docker run --rm --network core-internal postgres:16-alpine \
+>   sh -c "PGPASSWORD='<password>' psql -h core-postgres -U app_n8n -d app_n8n -c 'select current_user;'"
+> ```
+> This is the only form that exercises the same `host ... scram-sha-256` rule
+> real apps hit. If this fails, the credential is genuinely wrong - fix it with
+> `ROTATE=1 ./scripts/create-app-database.sh <app>` and update that app's
+> `.env`, however confidently a socket-based `psql` login "worked".
+
 From apps-node (or any machine on the WireGuard mesh), point a regular Postgres
-client at `10.10.0.1:5432` with the app's own role/database credentials.
+client at `10.10.0.1:5432` with the app's own role/database credentials - that
+path goes over the network too, so it is a valid test.
 
 Need to browse tables visually just once? Run **Adminer** on demand rather than
 adding a permanent service:
