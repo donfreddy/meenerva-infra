@@ -36,7 +36,14 @@ services:
 
       # --- site ---
       MM_SERVICESETTINGS_SITEURL: "https://chat.${PRIMARY_DOMAIN}"
-      MM_SERVICESETTINGS_ENABLELOCALMODE: "false"
+      # Required for the mmctl-based healthcheck below (mmctl --local talks to
+      # Mattermost over a Unix socket that only exists when this is true) -
+      # setting this to false, as an earlier version of this file did,
+      # breaks the healthcheck: the socket never gets created, mmctl can't
+      # connect, Docker reports the container unhealthy, and Traefik (which
+      # does not route to unhealthy containers) never creates a router or
+      # requests a certificate for it at all.
+      MM_SERVICESETTINGS_ENABLELOCALMODE: "true"
 
       # --- outbound mail (Stalwart relay on core-node) ---
       MM_EMAILSETTINGS_SENDEMAILNOTIFICATIONS: "true"
