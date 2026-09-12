@@ -80,6 +80,33 @@ Keycloak token is used and no mailbox password is stored.
 Bulwark Webmail on core-node (`webmail.meenerva.io`) stays available as the
 native JMAP standalone / fallback client.
 
+## Bundled apps instead of separate services
+
+Enabling a Nextcloud app costs far less than deploying a whole separate
+container (it runs inside the existing `apps-nextcloud` PHP process, no new
+service/database/Traefik route). Before adding a standalone tool for
+something, check whether a Nextcloud app already covers it - this is also
+why Cal.com and Jitsi are on hold in the roadmap for now.
+
+```sh
+docker exec -u www-data apps-nextcloud php occ app:install <id>
+docker exec -u www-data apps-nextcloud php occ app:enable <id>
+```
+
+| App ID | What it replaces / covers |
+|--------|---------------------------|
+| `spreed` (Talk) | Chat + video calls - covers what Jitsi would, while Jitsi is on hold |
+| `mail` | Already covered above (D-11 primary mail client) |
+| `notes` | Simple personal/team notes |
+| `contacts` | CardDAV address book, syncs with Mail |
+| `calendar` | CalDAV calendar **with built-in Appointments/booking pages** - covers what Cal.com would, while Cal.com is on hold |
+| `deck` | Lightweight Kanban board - good for small ad-hoc task lists; **not** a replacement for OpenProject's Gantt/work-package/time-tracking once that lands, just a lighter option for things that don't need it |
+| `forms` | Simple surveys/forms, no separate tool needed for this |
+
+Enable what the team actually uses; each additional app is a small but
+nonzero amount of PHP/DB load, no need to turn everything on by default. Skip
+`deck` once OpenProject is deployed if it turns out redundant for your usage.
+
 ## Notes
 
 - Run `occ maintenance:repair` and the recommended cron (`nextcloud-cron`
