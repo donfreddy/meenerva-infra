@@ -32,12 +32,39 @@ Practical options, in order of effort:
    [`10-identity-keycloak.md`](../../../docs/10-identity-keycloak.md) section
    4's "keeping Keycloak the only place accounts are created" note - this is
    the one deliberate exception, same as every other app's local admin).
-2. **GitLab OAuth as a workaround.** Team Edition *does* include a built-in
-   "Sign in with GitLab" OAuth2 integration. Keycloak can be configured to
-   answer GitLab-shaped OAuth2 endpoints (a well-known self-hosting trick),
-   giving SSO without Enterprise. Not set up here - verify the current
-   Keycloak/Mattermost versions still support this pairing before investing
-   time in it, and treat it as a distinct task, not a quick follow-up.
+2. **GitLab OAuth as a workaround (confirmed viable, do this).** Team Edition
+   *does* include a built-in "Sign in with GitLab" OAuth2 integration, and its
+   endpoint fields accept any OAuth2-compatible server, not only gitlab.com -
+   a well-known, legitimate self-hosting trick, not a hack that might break at
+   any moment. Steps:
+
+   **In Keycloak** (realm `meenerva`):
+   1. Clients -> Create: ID `mattermost`, Client authentication: On, Standard
+      flow: On, Valid redirect URI
+      `https://chat.meenerva.io/signup/gitlab/complete` (also add
+      `https://chat.meenerva.io/login/gitlab/complete`).
+   2. **Add a protocol mapper so Mattermost's GitLab-shaped parser finds what
+      it expects.** Mattermost's GitLab integration reads a `username` field
+      from the user-info response, because that is what GitLab's own API
+      calls it; Keycloak's default claim is `preferred_username`, not
+      `username`, and login will fail on a missing-field error without this.
+      On the `mattermost` client -> Client scopes -> its dedicated scope ->
+      **Add mapper -> By configuration -> User Property**: Name `username`,
+      Property `username`, Token Claim Name `username`, add to ID token +
+      access token + userinfo.
+   3. Copy the client secret.
+
+   **In Mattermost** (System Console -> Authentication -> GitLab):
+   - Enable
+   - Application ID: the Keycloak client ID (`mattermost`)
+   - Application Secret: the Keycloak client secret
+   - User API Endpoint: `https://id.meenerva.io/realms/meenerva/protocol/openid-connect/userinfo`
+   - Auth Endpoint: `https://id.meenerva.io/realms/meenerva/protocol/openid-connect/auth`
+   - Token Endpoint: `https://id.meenerva.io/realms/meenerva/protocol/openid-connect/token`
+
+   Optionally rename the login button's label from "GitLab" in Mattermost's
+   custom branding settings so it reads "Keycloak" / "MEENERVA SSO" instead -
+   cosmetic only, does not change the underlying mechanism.
 3. **Mattermost Enterprise.** Has a free tier for small teams in some
    licensing generations - check current Mattermost licensing before
    assuming this is free at your team size.
