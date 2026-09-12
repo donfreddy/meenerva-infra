@@ -1,8 +1,9 @@
 # meenerva-infra
 
 Infrastructure-as-Code for the **MEENERVA** startup studio. Self-hosted, open-source
-SaaS tooling deployed with Docker Compose, managed visually through Portainer, and
-version-controlled here.
+SaaS tooling deployed with Docker Compose over SSH (`git pull` + `docker compose
+up -d`, see decision D-12), version-controlled here. Portainer is installed on
+core-node as a visual status dashboard, not as the deployment mechanism.
 
 This repository is the single source of truth. If a server is lost, it can be rebuilt
 from a blank Ubuntu image using only the scripts and compose files in this repo plus
@@ -86,7 +87,7 @@ meenerva-infra/
 
 Full detail in [`docs/07-deployment-guide.md`](docs/07-deployment-guide.md). Summary:
 
-1. **DNS** – point the records in [`docs/05-dns-and-mail.md`](docs/05-dns-and-mail.md)
+1. **DNS**: point the records in [`docs/05-dns-and-mail.md`](docs/05-dns-and-mail.md)
    at the two server IPs (A/AAAA, MX, SPF, DKIM, DMARC, PTR/rDNS).
 2. **Bootstrap core-node**
    ```sh
@@ -113,8 +114,9 @@ Full detail in [`docs/07-deployment-guide.md`](docs/07-deployment-guide.md). Sum
 7. **Bring up apps-node** later with `./scripts/init-apps-node.sh` +
    `./scripts/setup-wireguard.sh`, then deploy apps from `apps-node/apps/`.
 
-After the first manual launch, every subsequent change is deployed through
-**Portainer → Stacks → Git repository**, pointing at this repo.
+After the first manual launch, every subsequent change is deployed with
+`git pull` + `make core-up` / `make apps-up` / `make app-up NAME=<app>` over
+SSH on the node that owns the change (decision D-12) - not through Portainer.
 
 ---
 

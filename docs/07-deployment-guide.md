@@ -76,18 +76,23 @@ make core-up          # re-applies; Keycloak / n8n reconnect
 | Bulwark Webmail | `https://webmail.meenerva.io` | log in (Keycloak SSO or mailbox password), send a test to mail-tester.com |
 | n8n | `https://n8n.meenerva.io` | create owner account, set SMTP, import baseline workflows |
 
-## Step 6 - Convert to Git-managed stacks (Portainer)
+## Step 6 - Ongoing deploys (no Portainer GitOps - see D-12)
 
-For each stack you want Portainer to manage:
+Every change after the initial bring-up follows the same two commands, on the
+node that owns the change:
 
-1. Portainer -> **Stacks** -> **Add stack** -> **Repository**.
-2. Repo URL: this repo. Reference: `refs/heads/main`.
-3. Compose path: `core-node/docker-compose.yml`.
-4. Load environment variables from the same values as `core-node/.env`.
-5. Enable **Automatic updates** (polling every 5 min) or copy the **webhook** into a
-   GitHub Action / repo webhook.
+```sh
+cd /opt/meenerva-infra
+git pull
+make core-up          # or: make apps-up / make app-up NAME=<app>
+```
 
-From now on: push to `main` -> Portainer redeploys.
+Portainer stays installed and shows the running stacks/containers (useful for a
+quick visual check of status, logs, resource usage), but it does not deploy
+anything - decision D-12 in
+[`02-architecture-decisions.md`](02-architecture-decisions.md) covers why the
+originally-planned "Stacks -> Repository" GitOps flow was dropped after Phase 1
+bring-up showed every real fix went through direct SSH regardless.
 
 ## Step 7 - Bring up apps-node
 
@@ -126,12 +131,16 @@ make apps-config && make apps-up
 make app-new NAME=nextcloud                          # already scaffolded; use for the next one
 ```
 
-Deploy `apps-node/apps/nextcloud/docker-compose.yml` as a Portainer repository
-stack on apps-node. See [`08-adding-an-app.md`](08-adding-an-app.md).
+On apps-node:
+```sh
+cp apps-node/apps/nextcloud/.env.example apps-node/apps/nextcloud/.env   # fill in
+make app-up NAME=nextcloud
+```
+See [`08-adding-an-app.md`](08-adding-an-app.md) for the full walkthrough.
 
 ## Rollback
 
-- Bad stack update: Portainer -> Stacks -> the stack -> **Restore** a previous Git
-  revision, or `git revert` on `main`.
+- Bad deploy: `git revert` the offending commit on `main`, `git pull` on the
+  node, then `make core-up` / `make apps-up` / `make app-up NAME=<app>` again.
 - Bad data migration: restore that one database from the nightly dump
   (`./scripts/restore.sh`, choose *single database*).

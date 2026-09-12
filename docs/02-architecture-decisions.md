@@ -209,3 +209,54 @@ production. XOAUTH2 / provisioning details and the password fallback are in
 - *Roundcube as the standalone client* - proven and lighter, but IMAP-only, dated
   UX, no native OIDC, and no calendar/contacts; superseded by Bulwark for the
   JMAP-native path.
+
+---
+
+## D-12 - Deployment stays `git pull` + `docker compose up -d` over SSH; Portainer is a dashboard, not the GitOps engine
+
+**Context.** D-01 through the Phase 1 deployment guide originally assumed
+Portainer's "Stacks -> Repository" feature would take over as the deployment
+mechanism after the first manual bring-up: push to `main`, Portainer polls Git
+and redeploys. In practice, once core-node was live, Portainer showed the
+CLI-launched `meenerva-core` stack in **Limited** control mode (it detects
+externally-created Compose projects but does not own their lifecycle), and
+every single fix made during initial operation - restarts, volume surgery,
+`docker exec` diagnostics, log inspection - went through direct SSH and the
+`docker`/`docker compose` CLI. Portainer's UI was never actually used.
+
+**Decision.** Keep the manual workflow as the deployment mechanism on both
+nodes: `git pull` then `docker compose --project-directory <node> --env-file
+<node>/.env up -d` (wrapped by `make core-up` / `make apps-up` / `make app-up
+NAME=<app>`). Portainer stays installed, but purely as a **visual status
+dashboard** (container list, logs, resource usage) - not as the thing that
+deploys anything. Do not attempt to migrate the CLI-launched stacks into
+Portainer-owned "Repository" stacks; it would require adopting or replacing
+already-running, named containers for a mechanism that duplicates two lines of
+SSH with more moving parts and less visibility into *when* a deploy actually ran.
+
+**Consequences.** No webhook/polling layer to reason about when something
+doesn't redeploy as expected; a `git push` requires a manual `git pull` + `up -d`
+on the target node (documented per-change in this repo's guidance, not
+automatic). Portainer's ~512 MB stays a monitoring convenience, re-evaluate
+dropping it entirely (D-12 vs removing it) if it turns out not to earn even that
+- it is also a public-internet attack surface (see the Safe-Browsing note below)
+worth minimizing if unused. `apps-node/apps/<name>/README.md` and
+[`08-adding-an-app.md`](08-adding-an-app.md) deploy instructions were updated
+to use `make app-up NAME=<app>` instead of "add a Portainer Repository stack".
+
+**Aside - Portainer and public exposure.** `portainer.<domain>` triggered a
+Chrome "Dangerous site" (Google Safe Browsing) warning shortly after going
+live, most likely inherited IP reputation from a previous tenant of the
+recycled Contabo IP rather than anything on this deployment - checked via
+`transparencyreport.google.com/safe-browsing/search`. Independent of that,
+exposing a tool with full Docker control (root-equivalent on the host) to the
+entire internet is worth reconsidering: an IP allow-list Traefik middleware or
+moving it behind the WireGuard mesh only are both cheap follow-ups if Portainer
+is kept.
+
+**Rejected alternative - migrate to Portainer GitOps as originally planned:**
+would have required either standing up a second, differently-named stack
+(duplicate containers, port/network conflicts) or manually adopting the
+existing one into Portainer's model, for a benefit (saving `git pull && up -d`)
+that does not offset the migration risk or the loss of directness when
+debugging - shown repeatedly during Phase 1 bring-up to require SSH regardless.

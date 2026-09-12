@@ -5,7 +5,7 @@
 | Goal | How it is met |
 |------|---------------|
 | Rebuild any node from zero in under 30 minutes | Everything is in this repo + off-site backups; bootstrap scripts are idempotent |
-| Add a new open-source app in ~5 minutes | `apps/_template/` + `new-app.sh` + Portainer Git stacks |
+| Add a new open-source app in ~5 minutes | `apps/_template/` + `new-app.sh` + `make app-up` |
 | No single point of failure at the proxy layer | Each node runs its own Traefik and terminates its own TLS |
 | Databases never exposed to the internet | PostgreSQL / Redis bind only to the WireGuard interface |
 | Predictable resource usage | Every container has an explicit `mem_limit` and `healthcheck` |
@@ -24,8 +24,8 @@ that other services depend on.
 
 | Service | Image | Purpose | mem_limit |
 |---------|-------|---------|-----------|
-| Traefik v3 | `traefik:v3.3` | Edge reverse proxy, ACME TLS, HTTP->HTTPS | 192 MB |
-| Portainer CE | `portainer/portainer-ce` | Visual stack + container management | 512 MB |
+| Traefik v3 | `traefik:v3.7.13` | Edge reverse proxy, ACME TLS, HTTP->HTTPS | 192 MB |
+| Portainer CE | `portainer/portainer-ce` | Status dashboard only (containers, logs, resource usage) - not the deployment mechanism, see D-12 | 512 MB |
 | PostgreSQL 16 | `postgres:16-alpine` | Shared relational database, one DB+user per app | 3 GB |
 | Redis 7 | `redis:7-alpine` | Shared cache / queue backend | 384 MB |
 | Keycloak 26 | `quay.io/keycloak/keycloak` | Central identity provider (OIDC / SAML), MFA | 1.25 GB (heap capped) |
@@ -159,8 +159,10 @@ Restore procedure: [`06-secrets-and-backups.md`](06-secrets-and-backups.md).
 
 1. **Bootstrap (once per node, over SSH):** `bootstrap-node.sh` then
    `init-<role>-node.sh`, then `make core-up` / `make apps-up` for the edge stack.
-2. **Everything after that:** Portainer → Stacks → *Add stack* → *Repository*,
-   pointing at this repo and the relevant `docker-compose.yml`. Pushing to `main`
-   updates the stack (enable Portainer's automatic Git polling or the webhook).
-3. **Secrets** live in each stack's environment in Portainer (or a per-node `.env`
-   that is never committed), not in the repo.
+2. **Everything after that:** `git pull` then `make core-up` / `make apps-up` /
+   `make app-up NAME=<app>`, over SSH on the node that owns the change. No
+   Portainer GitOps - decision D-12 covers why that was dropped after Phase 1
+   showed every real fix needed direct SSH access anyway. Portainer stays
+   installed as a status dashboard only.
+3. **Secrets** live in a per-node `.env` (git-ignored, never committed), not in
+   the repo.

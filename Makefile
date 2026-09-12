@@ -65,10 +65,22 @@ db-create: ## Create an isolated DB+user in core PostgreSQL: make db-create APP=
 	./scripts/create-app-database.sh "$(APP)"
 
 ## ---- apps ----
-.PHONY: app-new
+.PHONY: app-new app-up app-down app-logs
 app-new: ## Scaffold a new application: make app-new NAME=metabase
 	@test -n "$(NAME)" || { echo "Usage: make app-new NAME=<name>"; exit 1; }
 	./scripts/new-app.sh "$(NAME)"
+
+app-up: ## Deploy/update one app on apps-node: make app-up NAME=nextcloud
+	@test -n "$(NAME)" || { echo "Usage: make app-up NAME=<name>"; exit 1; }
+	docker compose --project-directory apps-node/apps/$(NAME) --env-file apps-node/apps/$(NAME)/.env up -d --remove-orphans
+
+app-down: ## Stop one app on apps-node: make app-down NAME=nextcloud
+	@test -n "$(NAME)" || { echo "Usage: make app-down NAME=<name>"; exit 1; }
+	docker compose --project-directory apps-node/apps/$(NAME) --env-file apps-node/apps/$(NAME)/.env down
+
+app-logs: ## Follow one app's logs on apps-node: make app-logs NAME=nextcloud
+	@test -n "$(NAME)" || { echo "Usage: make app-logs NAME=<name>"; exit 1; }
+	docker compose --project-directory apps-node/apps/$(NAME) --env-file apps-node/apps/$(NAME)/.env logs -f --tail=100
 
 ## ---- backups ----
 .PHONY: backup restore

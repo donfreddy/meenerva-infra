@@ -21,7 +21,7 @@ make app-new NAME=metabase
 
 ```sh
 ./scripts/create-app-database.sh metabase        # run on core-node
-# prints the generated password once; put it in the app's .env / Portainer env
+# prints the generated password once; put it in the app's .env
 ```
 
 Apps needing a non-Postgres engine (ClickHouse, OpenSearch, MongoDB) declare that
@@ -54,18 +54,22 @@ Keycloak -> realm `meenerva` -> Clients -> Create: `metabase`, confidential, red
 
 ## 7. Deploy
 
-First, verify the pinned image tag actually exists (Portainer will otherwise fail
+First, verify the pinned image tag actually exists (a bad tag otherwise fails
 mid-pull with no early warning):
 
 ```sh
 ./scripts/check-images.sh apps-node/apps/metabase/docker-compose.yml
 ```
 
-Portainer (apps-node) -> Stacks -> Add stack -> Repository:
+Then, on apps-node (deployment is `git pull` + `docker compose`, not Portainer -
+see decision D-12):
 
-- compose path `apps-node/apps/metabase/docker-compose.yml`
-- environment from the app `.env`
-- enable automatic Git updates
+```sh
+cd /opt/meenerva-infra
+git pull
+cp apps-node/apps/metabase/.env.example apps-node/apps/metabase/.env   # fill in
+make app-up NAME=metabase
+```
 
 Traefik picks up the labels within seconds and issues the certificate.
 
@@ -90,5 +94,5 @@ Traefik picks up the labels within seconds and issues the certificate.
 - [ ] Keycloak client created
 - [ ] DNS record added
 - [ ] docs updated (naming, roadmap)
-- [ ] deployed as a Portainer Git stack, cert issued
+- [ ] deployed with `make app-up NAME=<app>`, cert issued
 ```
