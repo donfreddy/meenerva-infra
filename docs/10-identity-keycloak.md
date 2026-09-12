@@ -85,6 +85,23 @@ When adding a new app's client, follow the pattern in
 `Standard flow: On`, redirect URI scoped to that app's real callback path (not
 a wildcard on the whole domain), Web origins set to the app's origin only.
 
+### Keeping Keycloak the only place accounts are created
+
+An OIDC client on an app (Nextcloud's `user_oidc`, etc.) **adds** an
+authentication backend, it does not remove the app's own local one. To keep
+"an account only exists because it was created in Keycloak" true in practice:
+
+- Do not use each app's own "invite a user" / "create user" flow for real
+  people - create them in Keycloak (section 6) and let OIDC provision the app
+  side on first login instead.
+- Keep exactly **one** local admin account per app as a break-glass fallback
+  (same reasoning as Keycloak's own `master`-realm bootstrap admin) in case
+  Keycloak itself is unreachable - not zero, that would risk locking
+  yourself out of every app at once during a Keycloak incident (this
+  happened during Phase 1 bring-up, see section 7's realm-reset procedure).
+- Disable open self-registration wherever an app has it (usually off by
+  default, worth confirming per app rather than assuming).
+
 ## 5. Service accounts (for automation, e.g. n8n)
 
 For n8n (or any automation) to call the Keycloak Admin API (create/disable

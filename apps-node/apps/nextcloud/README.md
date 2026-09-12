@@ -107,6 +107,14 @@ Enable what the team actually uses; each additional app is a small but
 nonzero amount of PHP/DB load, no need to turn everything on by default. Skip
 `deck` once OpenProject is deployed if it turns out redundant for your usage.
 
+Also worth enabling: `files_external` (External storage support) to mount an
+S3-compatible bucket as a folder - useful for large/archival files without
+growing the `nextcloud-data` volume. **Use a separate Backblaze B2 bucket for
+this**, not `meenerva-backups` - that one is managed by restic for encrypted
+backups (see [`06-secrets-and-backups.md`](../../../docs/06-secrets-and-backups.md));
+mixing live user-facing storage into the same bucket risks accidental
+deletion and confuses what is actually a backup.
+
 ## Notes
 
 - Run `occ maintenance:repair` and the recommended cron (`nextcloud-cron`
