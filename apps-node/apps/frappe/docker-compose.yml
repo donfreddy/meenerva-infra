@@ -132,7 +132,16 @@ services:
       # Verify curl/wget exist in this custom-built image before trusting
       # this - build layers can differ from the base image's own tooling.
       # See the DocuSeal/EspoCRM/OpenProject precedent in docs/02.
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/method/ping"]
+      #
+      # Explicit Host header required: Frappe resolves which site to serve
+      # from the Host header (FRAPPE_SITE_NAME_HEADER), and a bare curl to
+      # 127.0.0.1 sends Host: 127.0.0.1, which matches no site - confirmed
+      # live 2026-09-13, container stayed "unhealthy" (so Traefik never
+      # routed to it) even with both real sites up and answering fine.
+      # Pinned to the erp. site specifically; this only proves THAT site is
+      # up, not hr. - acceptable since both sites share the same backend/
+      # workers, so one being reachable is a good proxy for the whole stack.
+      test: ["CMD", "curl", "-fsS", "-H", "Host: erp.${PRIMARY_DOMAIN}", "http://127.0.0.1:8080/api/method/ping"]
       interval: 30s
       timeout: 10s
       retries: 5
