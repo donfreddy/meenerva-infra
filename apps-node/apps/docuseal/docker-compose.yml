@@ -65,9 +65,12 @@ services:
     healthcheck:
       # This image is Alpine-based without curl (see the Portainer/Mattermost
       # lesson in docs/02: never assume a shell tool exists without checking)
-      # - confirmed live 2026-09-13 (`which curl` -> not found, `which wget`
-      # -> /usr/bin/wget). Use wget instead.
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      # - confirmed live 2026-09-13 (`which curl` -> not found; wget/nc/ruby
+      # present). `/health` is NOT a real DocuSeal route either - it 404s
+      # (also confirmed live) - this Rails app has no dedicated health-check
+      # endpoint, so use a TCP-level probe on the app port instead of an HTTP
+      # path.
+      test: ["CMD", "nc", "-z", "127.0.0.1", "3000"]
       interval: 30s
       timeout: 5s
       retries: 5
