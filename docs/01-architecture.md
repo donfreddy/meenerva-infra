@@ -119,10 +119,10 @@ Docker network.
 ## 4. Identity flow
 
 ```
-User browser ──► apps-node app ──(302)──► id.meenerva.io (Keycloak)
-                                              │  authenticate + MFA
-User browser ◄── app session ◄──(code)────────┘
-apps-node app ──(client_credentials / introspection, over mesh or public)──► Keycloak
+User browser --> apps-node app --(302)--> id.meenerva.io (Keycloak)
+                                              |  authenticate + MFA
+User browser <-- app session <--(code)--------+
+apps-node app --(client_credentials / introspection, over mesh or public)--> Keycloak
 ```
 
 Keycloak realm `meenerva`, one confidential client per application. Groups drive
@@ -134,17 +134,17 @@ automation, and the onboarding/offboarding shape - in
 ## 5. Mail flow
 
 ```
-Inbound:   Internet ──MX──► core-node:25 ──► Stalwart ──► mailbox store (stalwart-data volume)
+Inbound:   Internet --MX--> core-node:25 --> Stalwart --> mailbox store (stalwart-data volume)
 
 Clients (same mailboxes, D-11):
-  Primary:  Browser ──► cloud.meenerva.io ──► Nextcloud Mail (apps-node)
-                     ──IMAP/SMTP over TLS──► mail.meenerva.io:993/587 ──► Stalwart
-  Fallback: Browser ──► webmail.meenerva.io ──► Bulwark Webmail (core-node)
-                     ──JMAP over TLS──► mail.meenerva.io ──► Stalwart
-  Native:   Thunderbird / K-9 / Apple Mail ──autoconfig.meenerva.io──► Stalwart
+  Primary:  Browser --> cloud.meenerva.io --> Nextcloud Mail (apps-node)
+                     --IMAP/SMTP over TLS--> mail.meenerva.io:993/587 --> Stalwart
+  Fallback: Browser --> webmail.meenerva.io --> Bulwark Webmail (core-node)
+                     --JMAP over TLS--> mail.meenerva.io --> Stalwart
+  Native:   Thunderbird / K-9 / Apple Mail --autoconfig.meenerva.io--> Stalwart
 
-Outbound (apps):   app ──► 10.10.0.1:587 (mesh) ──► Stalwart ──relay──► SES/Postmark/... ──► recipient MX
-Outbound (direct): Stalwart ──:25──► recipient MX   (fallback / internal only)
+Outbound (apps):   app --> 10.10.0.1:587 (mesh) --> Stalwart --relay--> SES/Postmark/... --> recipient MX
+Outbound (direct): Stalwart --:25--> recipient MX   (fallback / internal only)
 ```
 
 Both web clients are stateless views on one Stalwart server; mailbox state (read,

@@ -84,12 +84,12 @@ Stop it (`Ctrl+C`) when done - it is not meant to stay running.
 
 ```
                          core-node
-  core-postgres ──(nightly 02:00, pg_dump per DB)──► /opt/meenerva-infra/backups/pg/*.sql.gz
-       │                                                        │
-  named volumes (stalwart-data, n8n-data,        ┌──────────────┘
-  webmail-data, traefik-acme)                    │
-       │                                         ▼
-       └────────► offen/docker-volume-backup ──► Backblaze B2 (encrypted, restic-compatible)
+  core-postgres --(nightly 02:00, pg_dump per DB)--> /opt/meenerva-infra/backups/pg/*.sql.gz
+       |                                                        |
+  named volumes (stalwart-data, n8n-data,        +--------------+
+  webmail-data, traefik-acme)                    |
+       |                                         v
+       +--------> offen/docker-volume-backup --> Backblaze B2 (encrypted, restic-compatible)
                                                   bucket: meenerva-backups
                                                   retention: 30 daily, 8 weekly
 ```
