@@ -46,7 +46,7 @@ fi
 
 log "Provisioning ${DB} / ${USER} in ${CONTAINER}"
 
-docker exec -i "${CONTAINER}" mariadb -uroot -p"${MARIADB_ROOT_PASSWORD}" -v ON_ERROR_STOP=1 <<SQL
+docker exec -i "${CONTAINER}" mariadb -uroot -p"${MARIADB_ROOT_PASSWORD}" <<SQL
 CREATE DATABASE IF NOT EXISTS \`${DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 SQL
 
