@@ -108,6 +108,12 @@ services:
     environment:
       BACKEND: apps-frappe-backend:8000
       SOCKETIO: apps-frappe-websocket:9000
+      # Without this, nginx does not route by the request's Host header -
+      # confirmed live 2026-09-13: both erp.meenerva.io and hr.meenerva.io
+      # served the same (first-created) site until this was added. `$$host`
+      # is compose's escaping for a literal `$host` (nginx's own variable),
+      # matching frappe_docker's own reference default exactly.
+      FRAPPE_SITE_NAME_HEADER: "$$host"
       UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
       UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
       UPSTREAM_REAL_IP_RECURSIVE: "off"
