@@ -1,0 +1,178 @@
+# =============================================================================
+# OpenProject :: project/work management, on apps-node
+#   project.meenerva.io
+# Database: app_openproject on core-postgres (WireGuard) - OpenProject
+# supports Postgres natively, no shared MariaDB needed here (unlike EspoCRM).
+# Historically RAM-heavy (docs/09-roadmap.md Phase 3 note) - budget 2-4 GB
+# across the containers below, watch apps-node's steady-state RAM after this
+# lands.
+#
+# Four containers, all from the same image with a different command, matching
+# OpenProject's own reference docker-compose (opf/openproject-docker-compose):
+#   - openproject       web (Puma), the only one Traefik routes to
+#   - openproject-worker background jobs (mail delivery, imports, etc.)
+#   - openproject-cron  scheduled tasks (reminders, cleanups)
+#   - openproject-seeder one-shot: migrations + first-run admin seed, exits
+#     after running - `restart: on-failure`, not `unless-stopped`
+# All four share the same /var/openproject/assets volume via `volumes_from`,
+# same pattern as EspoCRM's daemon container - a shared attachments dir is
+# how OpenProject expects to be run, not a simplification on our part.
+#
+# Memcached is a small local sidecar (Rails cache store) - internal only, no
+# persistence needed, fine to lose on restart.
+#
+# No Keycloak SSO: custom OpenID Connect providers are an Enterprise add-on
+# in OpenProject, not available in the free Community Edition - see
+# README.md "Identity" before assuming a Keycloak client is needed here.
+# =============================================================================
+
+name: meenerva-openproject
+
+networks:
+  edge:
+    external: true
+  apps-internal:
+    external: true
+
+volumes:
+  openproject-data:   # /var/openproject/assets - attachments/uploads, add to offsite-backup
+
+services:
+  openproject:
+    image: openproject/openproject:17.8.0-slim
+    container_name: apps-openproject
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    networks: [edge, apps-internal]
+    command: ["./docker/prod/web"]
+    environment:
+      TZ: ${TZ}
+
+      # --- database (shared core-postgres over WireGuard) ---
+      # pool=20: OpenProject's own reference config sizes the pool for
+      # Puma's + background threads combined, not just Rails' default of 5 -
+      # a small pool here is a common source of connection-pool-timeout
+      # errors under real load.
+      DATABASE_URL: "postgres://app_openproject:${OPENPROJECT_DB_PASSWORD}@${CORE_DB_HOST}:${CORE_DB_PORT}/app_openproject?pool=20"
+
+      # --- site / security ---
+      OPENPROJECT_HOST__NAME: "project.${PRIMARY_DOMAIN}"
+      # Deliberately NOT setting OPENPROJECT_HTTPS=false: we ARE behind a
+      # TLS-terminating proxy (Traefik), which is exactly the case this
+      # defaults (true) to - see the docker-compose.yml comment history in
+      # docs/02 for why guessing env flags backwards has bitten this repo
+      # before (Mattermost's ENABLELOCALMODE).
+      SECRET_KEY_BASE: ${OPENPROJECT_SECRET_KEY_BASE}   # openssl rand -hex 64 - same value on all 4 containers
+
+      # --- cache (local memcached sidecar, not core-redis - OpenProject
+      # expects a memcache protocol server, not Redis) ---
+      OPENPROJECT_RAILS__CACHE__STORE: memcache_store
+      OPENPROJECT_CACHE__MEMCACHE__SERVER: apps-openproject-cache:11211
+
+      # --- admin bootstrap (only used on first install/seed) ---
+      OPENPROJECT_SEED__ADMIN__USER__NAME: "MEENERVA Admin"
+      OPENPROJECT_SEED__ADMIN__USER__MAIL: ${MAIL_FROM}
+      OPENPROJECT_SEED__ADMIN__USER__PASSWORD: ${OPENPROJECT_ADMIN_PASSWORD}
+
+      # --- outbound mail (Stalwart relay on core-node) ---
+      # Known upstream gotcha (opf/openproject-docker-compose#155): env-based
+      # SMTP settings have not always been picked up reliably in Docker
+      # Compose deployments. Verify mail actually sends after deploy; if not,
+      # configure the same values under Administration > System settings >
+      # Email notifications instead.
+      OPENPROJECT_EMAIL__DELIVERY__METHOD: smtp
+      OPENPROJECT_SMTP__ADDRESS: ${CORE_SMTP_HOST}
+      OPENPROJECT_SMTP__PORT: ${CORE_SMTP_PORT}
+      OPENPROJECT_SMTP__DOMAIN: ${PRIMARY_DOMAIN}
+      OPENPROJECT_SMTP__AUTHENTICATION: plain
+      OPENPROJECT_SMTP__USER__NAME: ${MAIL_FROM}
+      OPENPROJECT_SMTP__PASSWORD: ${MAIL_FROM_PASSWORD}
+      OPENPROJECT_SMTP__ENABLE__STARTTLS__AUTO: "true"
+    volumes:
+      - openproject-data:/var/openproject/assets
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: edge
+      traefik.http.routers.openproject.rule: Host(`project.${PRIMARY_DOMAIN}`)
+      traefik.http.routers.openproject.entrypoints: websecure
+      traefik.http.routers.openproject.tls.certresolver: letsencrypt
+      traefik.http.routers.openproject.middlewares: security-headers@file
+      traefik.http.services.openproject.loadbalancer.server.port: "8080"
+    healthcheck:
+      # Base image is Debian-based (Ruby official image) - curl is expected,
+      # but NOT verified live yet for this exact -slim tag ("slim" trims some
+      # packages). Check with `docker exec apps-openproject which curl wget`
+      # before trusting this; this has now bitten Mattermost, DocuSeal, and
+      # (partially) EspoCRM - always verify rather than assume.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health_checks/default"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    mem_limit: 1536m
+
+  openproject-worker:
+    image: openproject/openproject:17.8.0-slim
+    container_name: apps-openproject-worker
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    networks: [apps-internal]
+    command: ["./docker/prod/worker"]
+    environment:
+      TZ: ${TZ}
+      DATABASE_URL: "postgres://app_openproject:${OPENPROJECT_DB_PASSWORD}@${CORE_DB_HOST}:${CORE_DB_PORT}/app_openproject?pool=20"
+      SECRET_KEY_BASE: ${OPENPROJECT_SECRET_KEY_BASE}
+      OPENPROJECT_RAILS__CACHE__STORE: memcache_store
+      OPENPROJECT_CACHE__MEMCACHE__SERVER: apps-openproject-cache:11211
+      OPENPROJECT_EMAIL__DELIVERY__METHOD: smtp
+      OPENPROJECT_SMTP__ADDRESS: ${CORE_SMTP_HOST}
+      OPENPROJECT_SMTP__PORT: ${CORE_SMTP_PORT}
+      OPENPROJECT_SMTP__DOMAIN: ${PRIMARY_DOMAIN}
+      OPENPROJECT_SMTP__AUTHENTICATION: plain
+      OPENPROJECT_SMTP__USER__NAME: ${MAIL_FROM}
+      OPENPROJECT_SMTP__PASSWORD: ${MAIL_FROM_PASSWORD}
+      OPENPROJECT_SMTP__ENABLE__STARTTLS__AUTO: "true"
+    volumes_from: [openproject]
+    mem_limit: 1024m
+
+  openproject-cron:
+    image: openproject/openproject:17.8.0-slim
+    container_name: apps-openproject-cron
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    networks: [apps-internal]
+    command: ["./docker/prod/cron"]
+    environment:
+      TZ: ${TZ}
+      DATABASE_URL: "postgres://app_openproject:${OPENPROJECT_DB_PASSWORD}@${CORE_DB_HOST}:${CORE_DB_PORT}/app_openproject?pool=20"
+      SECRET_KEY_BASE: ${OPENPROJECT_SECRET_KEY_BASE}
+      OPENPROJECT_RAILS__CACHE__STORE: memcache_store
+      OPENPROJECT_CACHE__MEMCACHE__SERVER: apps-openproject-cache:11211
+    volumes_from: [openproject]
+    mem_limit: 384m
+
+  openproject-seeder:
+    image: openproject/openproject:17.8.0-slim
+    container_name: apps-openproject-seeder
+    restart: on-failure
+    security_opt: [no-new-privileges:true]
+    networks: [apps-internal]
+    command: ["./docker/prod/seeder"]
+    environment:
+      TZ: ${TZ}
+      DATABASE_URL: "postgres://app_openproject:${OPENPROJECT_DB_PASSWORD}@${CORE_DB_HOST}:${CORE_DB_PORT}/app_openproject?pool=20"
+      SECRET_KEY_BASE: ${OPENPROJECT_SECRET_KEY_BASE}
+      OPENPROJECT_SEED__ADMIN__USER__NAME: "MEENERVA Admin"
+      OPENPROJECT_SEED__ADMIN__USER__MAIL: ${MAIL_FROM}
+      OPENPROJECT_SEED__ADMIN__USER__PASSWORD: ${OPENPROJECT_ADMIN_PASSWORD}
+    volumes_from: [openproject]
+    mem_limit: 512m
+
+  openproject-cache:
+    image: memcached:1.6-alpine
+    container_name: apps-openproject-cache
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    networks: [apps-internal]
+    command: ["memcached", "-m", "128"]
+    mem_limit: 160m

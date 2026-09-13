@@ -56,8 +56,13 @@ the next starts. `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Phase 3 - Operating management  (apps-node)
 
-- [ ] OpenProject (historically RAM-heavy - budget 2-4 GB, watch it closely
-      on apps-node after the Phase 2 apps land)
+- [ ] OpenProject - moved up, deployed alongside the Phase 2 apps per the
+      user's explicit queue order (Mattermost, DocuSeal, EspoCRM,
+      OpenProject, then Frappe HR/ERPNext) rather than waiting for Phase 3
+      to formally start. Historically RAM-heavy - ~3.5 GB budgeted across
+      its 5 containers, watch apps-node's steady-state RAM. No Keycloak SSO
+      (Enterprise add-on only), see apps-node/apps/openproject/README.md
+      "Identity"
 - [ ] Gitea / Forgejo (self-hosted git; "GitHub" in the source plan)
 - [ ] Penpot ("Figma" equivalent, open source)
 - [ ] PostHog -> deferred to data-node (heavy); stub only here
