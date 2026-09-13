@@ -43,6 +43,17 @@ the identical values under **Administration -> System settings -> Email
 notifications** instead - don't assume the env vars are silently working
 without checking a real notification.
 
+**Known issue (2026-09-13, parked, not yet fixed):** sending mail fails with
+`Connection refused - connect(2) for "10.10.0.1" port 587`. First hit
+OpenProject's SSRF protection (fixed - `OPENPROJECT_SSRF_PROTECTION_IP_ALLOWLIST`
+above), but the connection itself is still refused underneath that. This is
+the exact same root cause already being tracked for Mattermost - Stalwart's
+own container sends an immediate TCP RST to mesh-sourced connections,
+confirmed via `tcpdump`, not a firewall/network issue on apps-node's or
+core-node's side. See D-16's final update in
+[`02-architecture-decisions.md`](../../../docs/02-architecture-decisions.md)
+before touching this again.
+
 ## Identity (read this before looking for a Keycloak client)
 
 **Custom OpenID Connect providers (which is how you'd point OpenProject at

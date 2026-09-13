@@ -83,4 +83,13 @@ not even be unlocked in this edition.
   messages themselves are in `app_mattermost`, already covered by the
   nightly core-postgres dump).
 
-> To-Do: Mattermost cannot reach Stalwart via the tunnel for SMTP. Not blocking access to the site, but will prevent email notifications.
+> To-Do: Mattermost cannot reach Stalwart via the tunnel for SMTP (Not
+> blocking access to the site, but will prevent email notifications).
+> Root-caused (not yet fixed) via `tcpdump`: Stalwart's own container sends
+> an immediate TCP RST to mesh-sourced connections - it is not a
+> network/firewall issue (D-14/D-16's fixes are all correctly in place).
+> Adding `10.10.0.0/24` to Stalwart's Allowed IPs and restarting it did not
+> help. See D-16's final update in
+> [`02-architecture-decisions.md`](../../../docs/02-architecture-decisions.md)
+> before retrying - do not re-probe with bare `nc`, it may be
+> self-perpetuating the block.

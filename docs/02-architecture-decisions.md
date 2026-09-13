@@ -458,12 +458,50 @@ failed (fast, active "Connection refused" rather than a silent drop), and
 the same DOCKER-USER gap was found present on **core-node** too, applying
 only to apps-node originally - both nodes need it since a packet from an
 apps-node container reaching a core-node container's *published port* is
-forwarded twice (once on each host). **Status: parked, not fully resolved**
-- see `apps-node/apps/mattermost/README.md`'s to-do note. Do not assume the
-UFW-route-allow rule alone is sufficient for a future cross-node container
-path; verify with actual traffic, not just a host-level `nc` check (the
-D-14 lesson applies here too: a check that doesn't reproduce the exact
-container-to-container path can pass while the real path still fails).
+forwarded twice (once on each host).
+
+**Update 2026-09-13 (later same day) - true root cause found via tcpdump.**
+With both fixes above confirmed correctly in place on both nodes (packet
+counters incrementing, UFW route rules present), the connection to
+`10.10.0.1:587` still failed - and OpenProject hit the identical symptom
+independently, ruling out anything Mattermost-specific. `tcpdump -i any
+'host 10.10.0.1 and port 587'` on core-node during a direct host-level
+`nc` test gave the definitive answer: the SYN correctly reaches
+`core-stalwart`'s container IP (`172.18.0.5:587`) via the DNAT rule, and
+**Stalwart's own container replies with an immediate RST** - proven by the
+packet capture showing the `[R.]` flag originating from `172.18.0.5`, not
+from any host/Docker firewall layer. So D-14's and D-16's fixes were both
+real and necessary (the packet does need to travel that whole path
+correctly), but insufficient because Stalwart itself refuses the
+connection once it arrives, based on the *unmasqueraded* source IP: a
+connection via the loopback hairpin path (`127.0.0.1`) gets Docker's
+automatic hairpin SNAT to a bridge-range address (inside the already
+allow-listed `172.16.0.0/12`), while a real mesh-sourced connection
+(`10.10.0.1` or `10.10.0.2`) shows its true source IP to Stalwart, which
+is outside that range.
+
+Adding `10.10.0.0/24` to Stalwart's **Settings -> Security -> Allowed IP
+addresses** (confirmed saved, no expiry) did not fix it, and a full
+`stalwart` container restart afterward did not either - the RST persisted
+identically. Checked **Blocked IP addresses** too: no entry for `10.10.0.1`
+or `10.10.0.2` (only an unrelated external IP banned for port scanning).
+Working theory, not yet confirmed: repeated bare-TCP `nc -z` probes against
+this port during the investigation itself (dozens, over roughly an hour)
+may look exactly like the "excessive port scanning" pattern Stalwart's own
+abuse protection is designed to catch, possibly triggering a short-lived,
+in-memory rate-limit/throttle that does not appear in the persisted
+Blocked IPs list - and each further `nc` test may have been re-extending
+that same window, making `nc` an actively self-defeating diagnostic tool
+here. **Status: parked, not fully resolved** - see
+`apps-node/apps/mattermost/README.md` and
+`apps-node/apps/openproject/README.md` to-do notes. Next time this is
+picked up: do NOT probe port 587 with bare `nc`; wait several minutes with
+zero connection attempts of any kind, then test with a real SMTP-speaking
+client (an app's own "send test email" action) as the very first attempt,
+and if it still fails, raise Stalwart's log verbosity (debug/trace, see the
+Bulwark OIDC lesson in `05-dns-and-mail.md` section 4 for why default
+verbosity has already been shown to hide the actual rejection reason once
+before) rather than repeating more TCP-level probing.
 
 ---
 
