@@ -69,6 +69,11 @@ services:
       traefik.http.services.APPNAME.loadbalancer.server.port: "8080"   # <-- container port
 
     healthcheck:
+      # Verify curl actually exists in this image before trusting this line -
+      # many minimal/Alpine images (DocuSeal, Portainer) don't ship it, only
+      # wget or nothing at all. `docker exec <container> which curl wget` on
+      # the running container is the fast way to check; a failed healthcheck
+      # here means Traefik never routes to the container (see docs/02).
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
       interval: 30s
       timeout: 5s
