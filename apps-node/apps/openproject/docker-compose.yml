@@ -88,6 +88,14 @@ services:
       OPENPROJECT_SMTP__USER__NAME: ${MAIL_FROM}
       OPENPROJECT_SMTP__PASSWORD: ${MAIL_FROM_PASSWORD}
       OPENPROJECT_SMTP__ENABLE__STARTTLS__AUTO: "true"
+      # OpenProject's SSRF protection blocks outbound connections to private
+      # IP ranges by default (sane default for a cloud app; wrong for us,
+      # since Stalwart is deliberately private-only) - confirmed live
+      # 2026-09-13: "L'adresse SMTP 10.10.0.1 n'est pas sure" until this was
+      # added. Allowlist the whole mesh subnet, not just this one IP, so a
+      # future integration (webhooks, etc.) hitting another mesh host isn't
+      # silently blocked the same way.
+      OPENPROJECT_SSRF_PROTECTION_IP_ALLOWLIST: "10.10.0.0/24"
     volumes:
       - openproject-data:/var/openproject/assets
     labels:
@@ -141,6 +149,7 @@ services:
       OPENPROJECT_SMTP__USER__NAME: ${MAIL_FROM}
       OPENPROJECT_SMTP__PASSWORD: ${MAIL_FROM_PASSWORD}
       OPENPROJECT_SMTP__ENABLE__STARTTLS__AUTO: "true"
+      OPENPROJECT_SSRF_PROTECTION_IP_ALLOWLIST: "10.10.0.0/24"   # see the openproject service's comment on this var
     volumes_from: [openproject]
     mem_limit: 1024m
 
