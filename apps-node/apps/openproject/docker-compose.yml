@@ -66,7 +66,7 @@ services:
 
       # --- cache (local memcached sidecar, not core-redis - OpenProject
       # expects a memcache protocol server, not Redis) ---
-      OPENPROJECT_RAILS__CACHE__STORE: memcache_store
+      OPENPROJECT_RAILS__CACHE__STORE: memcache
       OPENPROJECT_CACHE__MEMCACHE__SERVER: apps-openproject-cache:11211
 
       # --- admin bootstrap (only used on first install/seed) ---
@@ -122,7 +122,7 @@ services:
       TZ: ${TZ}
       DATABASE_URL: "postgres://app_openproject:${OPENPROJECT_DB_PASSWORD}@${CORE_DB_HOST}:${CORE_DB_PORT}/app_openproject?pool=20"
       SECRET_KEY_BASE: ${OPENPROJECT_SECRET_KEY_BASE}
-      OPENPROJECT_RAILS__CACHE__STORE: memcache_store
+      OPENPROJECT_RAILS__CACHE__STORE: memcache
       OPENPROJECT_CACHE__MEMCACHE__SERVER: apps-openproject-cache:11211
       OPENPROJECT_EMAIL__DELIVERY__METHOD: smtp
       OPENPROJECT_SMTP__ADDRESS: ${CORE_SMTP_HOST}
@@ -146,7 +146,7 @@ services:
       TZ: ${TZ}
       DATABASE_URL: "postgres://app_openproject:${OPENPROJECT_DB_PASSWORD}@${CORE_DB_HOST}:${CORE_DB_PORT}/app_openproject?pool=20"
       SECRET_KEY_BASE: ${OPENPROJECT_SECRET_KEY_BASE}
-      OPENPROJECT_RAILS__CACHE__STORE: memcache_store
+      OPENPROJECT_RAILS__CACHE__STORE: memcache
       OPENPROJECT_CACHE__MEMCACHE__SERVER: apps-openproject-cache:11211
     volumes_from: [openproject]
     mem_limit: 384m
