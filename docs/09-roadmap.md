@@ -26,8 +26,12 @@ the next starts. `[ ]` todo, `[~]` in progress, `[x]` done.
 - [x] Nextcloud Mail app wired to Stalwart (primary mail client, D-11) with
       an app-password (same pattern as Bulwark); Bulwark Webmail stays as
       the standalone/fallback client
-- [ ] Mattermost
-- [ ] DocuSeal
+- [~] Mattermost - deployed, admin created; SMTP relay to Stalwart over the
+      mesh not working yet (parked, see D-16 in docs/02 and
+      apps-node/apps/mattermost/README.md); SSO not configured yet
+- [ ] DocuSeal - compose/README/env scaffolded, not yet deployed on
+      apps-node; no Keycloak SSO (paid feature even self-hosted), see
+      apps-node/apps/docuseal/README.md "Identity"
 - [ ] EspoCRM
 
 **On hold (2026-09-13, explicit user decision - revisit later, not dropped):**

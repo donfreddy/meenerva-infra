@@ -1,0 +1,71 @@
+# =============================================================================
+# DocuSeal :: document signing, on apps-node
+#   sign.meenerva.io
+# Database: app_docuseal on core-postgres (WireGuard). Cache/queue: core-redis
+# db 6 (Sidekiq background jobs - email delivery, PDF processing - do not run
+# this app without Redis reachable, see README.md). SMTP via Stalwart relay.
+# No Keycloak SSO: OIDC/SAML is a paid DocuSeal feature, gated even for
+# self-hosted instances - see README.md "Identity" section before assuming a
+# Keycloak client is needed here.
+# =============================================================================
+
+name: meenerva-docuseal
+
+networks:
+  edge:
+    external: true
+
+volumes:
+  docuseal-data:     # uploaded/generated document files (add to offsite-backup)
+
+services:
+  docuseal:
+    image: docuseal/docuseal:3.2.4
+    container_name: apps-docuseal
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    networks: [edge]
+    environment:
+      TZ: ${TZ}
+
+      # --- database (shared core-postgres over WireGuard) ---
+      DATABASE_URL: "postgres://app_docuseal:${DOCUSEAL_DB_PASSWORD}@${CORE_DB_HOST}:${CORE_DB_PORT}/app_docuseal"
+
+      # --- cache/queue (shared core-redis over WireGuard) ---
+      # Required: Sidekiq (email delivery, PDF/document processing) has no
+      # fallback without Redis, unlike Mattermost which can run degraded.
+      REDIS_URL: "redis://:${CORE_REDIS_PASSWORD}@${CORE_REDIS_HOST}:${CORE_REDIS_PORT}/6"
+
+      # --- app identity / security ---
+      HOST: "sign.${PRIMARY_DOMAIN}"
+      FORCE_SSL: "true"
+      SECRET_KEY_BASE: ${DOCUSEAL_SECRET_KEY_BASE}   # openssl rand -hex 64
+
+      # --- outbound mail (Stalwart relay on core-node) ---
+      SMTP_ADDRESS: ${CORE_SMTP_HOST}
+      SMTP_PORT: ${CORE_SMTP_PORT}
+      SMTP_USERNAME: ${MAIL_FROM}
+      SMTP_PASSWORD: ${MAIL_FROM_PASSWORD}
+      SMTP_DOMAIN: ${PRIMARY_DOMAIN}
+      SMTP_FROM: ${MAIL_FROM}
+      SMTP_AUTHENTICATION: plain
+      SMTP_ENABLE_STARTTLS: "true"
+
+      # --- first admin is created via the web setup wizard on first visit ---
+    volumes:
+      - docuseal-data:/data
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: edge
+      traefik.http.routers.docuseal.rule: Host(`sign.${PRIMARY_DOMAIN}`)
+      traefik.http.routers.docuseal.entrypoints: websecure
+      traefik.http.routers.docuseal.tls.certresolver: letsencrypt
+      traefik.http.routers.docuseal.middlewares: security-headers@file
+      traefik.http.services.docuseal.loadbalancer.server.port: "3000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    mem_limit: 768m

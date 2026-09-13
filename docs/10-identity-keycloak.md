@@ -88,6 +88,14 @@ mapper Mattermost's GitLab-shaped parser requires. Full setup in
 [`apps-node/apps/mattermost/README.md`](../apps-node/apps/mattermost/README.md) -
 don't recreate this client from the usual pattern in section 4 above.
 
+**Note on DocuSeal (no client at all)**: DocuSeal's OIDC/SAML support is a
+paid add-on, gated even for self-hosted instances - there is no free way to
+wire it to Keycloak as of 2026-09. Do not create a `docuseal` client; every
+DocuSeal user is a local account managed inside DocuSeal itself. This is a
+full exception to the policy below, not just a break-glass admin - see
+[`apps-node/apps/docuseal/README.md`](../apps-node/apps/docuseal/README.md)
+"Identity" for the reasoning and the offboarding consequence.
+
 When adding a new app's client, follow the pattern in
 [`08-adding-an-app.md`](08-adding-an-app.md) step 6: `Client authentication: On`,
 `Standard flow: On`, redirect URI scoped to that app's real callback path (not
