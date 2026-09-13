@@ -29,9 +29,11 @@ the next starts. `[ ]` todo, `[~]` in progress, `[x]` done.
 - [~] Mattermost - deployed, admin created; SMTP relay to Stalwart over the
       mesh not working yet (parked, see D-16 in docs/02 and
       apps-node/apps/mattermost/README.md); SSO not configured yet
-- [ ] DocuSeal - compose/README/env scaffolded, not yet deployed on
-      apps-node; no Keycloak SSO (paid feature even self-hosted), see
-      apps-node/apps/docuseal/README.md "Identity"
+- [x] DocuSeal - deployed on apps-node (`sign.meenerva.io`); no Keycloak
+      SSO (paid feature even self-hosted), see
+      apps-node/apps/docuseal/README.md "Identity". Healthcheck uses a TCP
+      probe (`nc -z`), not curl/HTTP - this image has no curl and no
+      `/health` route, see docker-compose.yml comment
 - [ ] EspoCRM
 
 **On hold (2026-09-13, explicit user decision - revisit later, not dropped):**
