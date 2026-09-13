@@ -85,6 +85,12 @@ section 4), same as every other app.
 
 ## Notes
 
+- **`espocrm-daemon` restarting in a loop right after a fresh deploy is
+  normal, not a bug**: its entrypoint prints `Waiting for the main container
+  to be ready...` and exits/retries until `espocrm`'s install finishes
+  (confirmed live 2026-09-13, resolved on its own once `espocrm` logged
+  `Installation completed successfully`). Only investigate further if it is
+  still restarting a few minutes after `espocrm` itself reports healthy.
 - `espocrm-daemon` **must stay running** - it handles scheduled jobs,
   workflow automation, and the outbound email queue. If emails or workflows
   silently stop, check this container first, not just `espocrm`.

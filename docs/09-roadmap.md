@@ -34,10 +34,11 @@ the next starts. `[ ]` todo, `[~]` in progress, `[x]` done.
       apps-node/apps/docuseal/README.md "Identity". Healthcheck uses a TCP
       probe (`nc -z`), not curl/HTTP - this image has no curl and no
       `/health` route, see docker-compose.yml comment
-- [ ] EspoCRM - compose/README/env scaffolded, not yet deployed; requires the
-      new shared `apps-mariadb` (D-17, moved up from Phase 4); real free OIDC
-      support (unlike Mattermost/DocuSeal), see
-      apps-node/apps/espocrm/README.md "SSO"
+- [x] EspoCRM - deployed on apps-node (`crm.meenerva.io`), on the shared
+      `apps-mariadb` (D-17); real free OIDC support (unlike
+      Mattermost/DocuSeal), not yet configured - see
+      apps-node/apps/espocrm/README.md "SSO". SMTP not yet configured
+      (manual step, Administration > Outbound Emails)
 
 **On hold (2026-09-13, explicit user decision - revisit later, not dropped):**
 - Cal.com - **Nextcloud's own Calendar app covers scheduling/appointments in
