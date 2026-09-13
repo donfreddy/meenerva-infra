@@ -1,0 +1,112 @@
+# =============================================================================
+# EspoCRM :: CRM, on apps-node
+#   crm.meenerva.io
+# Database: app_espocrm on the shared apps-mariadb (apps-node/docker-compose.yml
+# - EspoCRM supports MySQL/MariaDB only, not Postgres, hence the separate
+# shared engine from core-postgres). No Redis needed.
+#
+# Two containers share the same /var/www/html volume, as EspoCRM's own
+# reference docker-compose does: `espocrm` (web) and `espocrm-daemon` (cron -
+# scheduled jobs, workflow processing, outbound email queue). Both must run
+# for the app to work correctly; the daemon has no HTTP endpoint of its own so
+# it gets no Traefik labels and no healthcheck (matches upstream, which does
+# not define one for it either).
+# =============================================================================
+
+name: meenerva-espocrm
+
+networks:
+  edge:
+    external: true
+  apps-internal:
+    external: true
+
+volumes:
+  espocrm-html:     # full app dir (code + uploads + generated config.php) - add to offsite-backup
+
+services:
+  espocrm:
+    image: espocrm/espocrm:10.0.6-apache
+    container_name: apps-espocrm
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    networks: [edge, apps-internal]
+    environment:
+      TZ: ${TZ}
+
+      # --- database (shared apps-mariadb, same node - see docker-compose.yml
+      # comment in apps-node/ for why this doesn't need the mesh) ---
+      ESPOCRM_DATABASE_PLATFORM: Mysql
+      ESPOCRM_DATABASE_HOST: apps-mariadb
+      ESPOCRM_DATABASE_PORT: "3306"
+      ESPOCRM_DATABASE_NAME: app_espocrm
+      ESPOCRM_DATABASE_USER: app_espocrm
+      ESPOCRM_DATABASE_PASSWORD: ${ESPOCRM_DB_PASSWORD}
+
+      # --- site ---
+      ESPOCRM_SITE_URL: "https://crm.${PRIMARY_DOMAIN}"
+
+      # --- admin bootstrap (only used on first install, unlike Nextcloud's
+      # web-wizard race window - see README.md) ---
+      ESPOCRM_ADMIN_USERNAME: ${ESPOCRM_ADMIN_USERNAME}
+      ESPOCRM_ADMIN_PASSWORD: ${ESPOCRM_ADMIN_PASSWORD}
+
+      # --- outbound mail is NOT set via env here (no documented env var for
+      # it) - configure under Administration > Outbound Emails after first
+      # login, pointed at Stalwart. See README.md.
+    volumes:
+      - espocrm-html:/var/www/html
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: edge
+      traefik.http.routers.espocrm.rule: Host(`crm.${PRIMARY_DOMAIN}`)
+      traefik.http.routers.espocrm.entrypoints: websecure
+      traefik.http.routers.espocrm.tls.certresolver: letsencrypt
+      traefik.http.routers.espocrm.middlewares: security-headers@file
+      traefik.http.services.espocrm.loadbalancer.server.port: "80"
+    healthcheck:
+      # Base image is php:*-apache (Debian) - curl is expected to be present,
+      # but NOT verified live yet for this exact tag. Check with
+      # `docker exec apps-espocrm which curl wget nc` before trusting this;
+      # swap to wget/nc if curl is missing (see the DocuSeal lesson in
+      # docs/02 - this has now happened twice, always verify before trusting
+      # a healthcheck tool in a new image).
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    mem_limit: 768m
+
+  espocrm-daemon:
+    image: espocrm/espocrm:10.0.6-apache
+    container_name: apps-espocrm-daemon
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    networks: [apps-internal]
+    entrypoint: docker-daemon.sh
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - espocrm-html:/var/www/html
+    mem_limit: 384m
+
+  # --- OPTIONAL: real-time websocket notifications ---
+  # Uncomment only if live in-app notifications become a hard requirement -
+  # the UI works fine without it (polling instead of push). Adds a ZeroMQ
+  # dependency and its own exposed port; not worth the complexity for v1.
+  # espocrm-websocket:
+  #   image: espocrm/espocrm:10.0.6-apache
+  #   container_name: apps-espocrm-websocket
+  #   restart: unless-stopped
+  #   networks: [edge, apps-internal]
+  #   entrypoint: docker-websocket.sh
+  #   environment:
+  #     TZ: ${TZ}
+  #     ESPOCRM_CONFIG_USE_WEB_SOCKET: "true"
+  #     ESPOCRM_CONFIG_WEB_SOCKET_URL: "wss://crm.${PRIMARY_DOMAIN}/ws"
+  #     ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBSCRIBER_DSN: "tcp://*:7777"
+  #     ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBMISSION_DSN: "tcp://apps-espocrm-websocket:7777"
+  #   volumes:
+  #     - espocrm-html:/var/www/html
+  #   mem_limit: 256m

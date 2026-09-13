@@ -3,11 +3,15 @@
 # Runs on: Contabo Cloud VPS 8 (apps-node, WireGuard 10.10.0.2)
 #
 # apps-node runs its OWN Traefik (decision D-05). Application stacks live under
-# apps/<name>/ and are deployed independently as Portainer Git stacks; they join
-# the `edge` network created here.
+# apps/<name>/ and are deployed independently via `git pull` + `make app-up`
+# (D-12/D-15); they join the `edge` network created here.
 #
-# Shared services (PostgreSQL, Redis, outbound SMTP) live on core-node and are
-# reached over WireGuard at 10.10.0.1. Identity is reached at https://id.<domain>.
+# Shared services on core-node (PostgreSQL, Redis, outbound SMTP) are reached
+# over WireGuard at 10.10.0.1. Identity is reached at https://id.<domain>.
+# MariaDB is the one shared data store that lives HERE instead, mutualized
+# across apps-node apps the same way core-postgres is (D-04) - see the
+# `mariadb` service below for why it does not need the same edge/mesh
+# treatment as core-postgres/core-redis.
 # =============================================================================
 
 name: meenerva-apps
@@ -24,6 +28,7 @@ networks:
 volumes:
   traefik-acme:
   apps-offsite-cache:
+  mariadb-data:
 
 services:
 
@@ -60,6 +65,42 @@ services:
       timeout: 5s
       retries: 5
 
+
+  # ===========================================================================
+  # MariaDB :: shared relational database for apps-node apps that need
+  # MySQL/MariaDB instead of Postgres (EspoCRM, and later ERPNext/Frappe HR -
+  # see docs/09-roadmap.md Phase 4, moved up because EspoCRM needs it now).
+  # Mirrors core-postgres's mutualization model (D-04): one database + user
+  # per app, created with scripts/create-mysql-database.sh.
+  #
+  # Unlike core-postgres/core-redis (D-14), this does NOT join `edge` or
+  # publish a port: its only consumers are other containers on THIS node,
+  # which reach it over `apps-internal` directly - there is no cross-node
+  # mesh hop to support, so none of D-14's "internal-only network breaks
+  # published ports" problem applies (that problem is specific to published
+  # ports, not container-to-container traffic on the same network/host).
+  # If a future node ever needs to reach this MariaDB remotely, revisit this
+  # the same way D-14 was resolved for core-postgres, don't assume the fix
+  # transfers automatically.
+  # ===========================================================================
+  mariadb:
+    image: mariadb:11.4.13
+    container_name: apps-mariadb
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    networks: [apps-internal]
+    environment:
+      TZ: ${TZ}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    mem_limit: 768m
 
   # Off-site backup of apps-node volumes to Backblaze B2.
   offsite-backup:

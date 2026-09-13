@@ -34,7 +34,10 @@ the next starts. `[ ]` todo, `[~]` in progress, `[x]` done.
       apps-node/apps/docuseal/README.md "Identity". Healthcheck uses a TCP
       probe (`nc -z`), not curl/HTTP - this image has no curl and no
       `/health` route, see docker-compose.yml comment
-- [ ] EspoCRM
+- [ ] EspoCRM - compose/README/env scaffolded, not yet deployed; requires the
+      new shared `apps-mariadb` (D-17, moved up from Phase 4); real free OIDC
+      support (unlike Mattermost/DocuSeal), see
+      apps-node/apps/espocrm/README.md "SSO"
 
 **On hold (2026-09-13, explicit user decision - revisit later, not dropped):**
 - Cal.com - **Nextcloud's own Calendar app covers scheduling/appointments in
@@ -60,11 +63,11 @@ the next starts. `[ ]` todo, `[~]` in progress, `[x]` done.
 
 ## Phase 4 - Core business  (apps-node, re-evaluate K3s here)
 
-- [ ] **New shared MariaDB service on apps-node** (mirrors `core-postgres`'s
-      mutualization: one database + isolated user per app), required because
-      Frappe (ERPNext/Frappe HR) and EspoCRM don't speak Postgres. Add
-      `create-app-database.sh`-equivalent tooling for MariaDB before the apps
-      below.
+- [x] **Shared MariaDB service on apps-node** - done early (D-17, Phase 2),
+      not waiting for this phase, because EspoCRM needed it sooner than
+      Frappe. `scripts/create-mysql-database.sh` is the
+      `create-app-database.sh`-equivalent tooling. ERPNext/Frappe HR below
+      reuse this same instance.
 - [ ] ERPNext + Frappe HR - same Frappe framework/bench; deploy as two
       "sites" on one Frappe stack rather than two separate deployments to
       save RAM and complexity

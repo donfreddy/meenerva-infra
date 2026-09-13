@@ -48,11 +48,13 @@ outbound mail over the private mesh.
 | Service | Purpose |
 |---------|---------|
 | Traefik v3 | Edge proxy + ACME TLS for apps-node subdomains |
+| MariaDB 11.4 | Shared relational database for MySQL-only apps (EspoCRM, later ERPNext/Frappe HR) - mutualized like core-postgres, but stays local to apps-node, see D-17 |
 | Nextcloud + Collabora | Files and documents (first reference app); the Nextcloud **Mail** app is the primary mail client, pointed at Stalwart on core-node (D-11) |
 | Mattermost | Team chat |
+| DocuSeal | Document signing |
+| EspoCRM | CRM |
 | OpenProject | Project and work management |
 | ERPNext / Frappe HR | ERP + HR (source of truth for the onboarding workflow) |
-| DocuSeal | Document signing |
 
 ### data-node (future - target 32 GB RAM)
 

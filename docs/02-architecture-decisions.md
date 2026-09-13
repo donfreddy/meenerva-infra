@@ -445,3 +445,58 @@ real SMTP-relay traffic, not just a synthetic `nc` check, so this is the
 actual fix, not a theory. Anything added later that needs a container on one
 node to reach a service on another over the mesh depends on this rule already
 being in place - it is not specific to Mattermost or to port 587.
+
+**Update 2026-09-13 - not the full story.** This rule was necessary but not
+sufficient for Mattermost's actual SMTP traffic: `iptables -L FORWARD -n -v`
+showed all forwarded packets being decided inside Docker's own
+`DOCKER-USER`/`DOCKER-FORWARD` chains *before* UFW's chains are ever
+consulted, regardless of the `ufw route allow` rule above. Explicit
+`iptables -I DOCKER-USER -s/-d 10.10.0.0/24 -j ACCEPT` rules on both nodes
+were required in addition, confirmed via packet counters actually
+incrementing on those rules. Even with both fixes, the connection still
+failed (fast, active "Connection refused" rather than a silent drop), and
+the same DOCKER-USER gap was found present on **core-node** too, applying
+only to apps-node originally - both nodes need it since a packet from an
+apps-node container reaching a core-node container's *published port* is
+forwarded twice (once on each host). **Status: parked, not fully resolved**
+- see `apps-node/apps/mattermost/README.md`'s to-do note. Do not assume the
+UFW-route-allow rule alone is sufficient for a future cross-node container
+path; verify with actual traffic, not just a host-level `nc` check (the
+D-14 lesson applies here too: a check that doesn't reproduce the exact
+container-to-container path can pass while the real path still fails).
+
+---
+
+## D-17 - Shared MariaDB on apps-node, moved up from Phase 4
+
+**Context.** EspoCRM (next in the app queue after Mattermost/DocuSeal) only
+supports MySQL/MariaDB, never Postgres - confirmed against EspoCRM's own
+Docker documentation. `09-roadmap.md` Phase 4 already anticipated this need
+("New shared MariaDB service on apps-node... required because Frappe
+(ERPNext/Frappe HR) and EspoCRM don't speak Postgres") but scheduled it
+alongside Frappe, later than EspoCRM's actual position in the user's
+prioritized queue (Mattermost, DocuSeal, EspoCRM, OpenProject, then Frappe).
+
+**Decision.** Bring up the shared MariaDB now, as an `apps-node/docker-compose.yml`
+service (`apps-mariadb`), ahead of the originally planned Phase 4 timing -
+mirrors core-postgres's mutualization model (D-04): one database + user per
+app, provisioned by a new `scripts/create-mysql-database.sh` (parallel script
+to `create-app-database.sh`, same safe-by-default re-run behavior). ERPNext
+and Frappe HR will reuse this same instance when Phase 4 starts rather than
+getting a second MariaDB.
+
+**Why this one does NOT need D-14's edge/mesh treatment.** core-postgres and
+core-redis had to join `edge` and publish a port because apps-node needs to
+reach them *across* the WireGuard mesh (D-14). `apps-mariadb` has no such
+requirement: every current and planned consumer (EspoCRM, ERPNext, Frappe HR)
+runs on apps-node itself, so plain `apps-internal` container-to-container
+networking is sufficient - no published port, no mesh hop, none of
+moby/moby#36174's failure mode (that bug is specific to published ports, not
+same-network container traffic). If a future node ever needs to reach this
+MariaDB remotely, that requirement has to be solved then, not assumed to
+already work.
+
+**Consequences.** apps-node gains one more always-on service (~768 MB
+`mem_limit`); revisit the apps-node RAM budget in `01-architecture.md` as
+more MariaDB-backed apps land. `MARIADB_ROOT_PASSWORD` is a new required
+secret in `apps-node/.env`.

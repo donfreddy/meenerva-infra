@@ -59,10 +59,14 @@ apps-down: ## Stop the apps-node edge stack
 	$(APPS) down
 
 ## ---- databases ----
-.PHONY: db-create
+.PHONY: db-create db-create-mysql
 db-create: ## Create an isolated DB+user in core PostgreSQL: make db-create APP=n8n
 	@test -n "$(APP)" || { echo "Usage: make db-create APP=<name>"; exit 1; }
 	./scripts/create-app-database.sh "$(APP)"
+
+db-create-mysql: ## Create an isolated DB+user in apps-node's shared MariaDB: make db-create-mysql APP=espocrm
+	@test -n "$(APP)" || { echo "Usage: make db-create-mysql APP=<name>"; exit 1; }
+	./scripts/create-mysql-database.sh "$(APP)"
 
 ## ---- apps ----
 .PHONY: app-new app-up app-down app-logs

@@ -62,6 +62,7 @@ One subdomain per user-facing service, `<service>.meenerva.io`.
 | `chat.` | apps | Mattermost |
 | `project.` | apps | OpenProject |
 | `sign.` | apps | DocuSeal |
+| `crm.` | apps | EspoCRM |
 | `erp.` | apps | ERPNext |
 | `siem.` / `analytics.` / `bi.` | data | reserved |
 
@@ -79,6 +80,20 @@ Mail service records (`MX`, `_dmarc`, `_domainkey`, `mta-sts`): see
 | Host (from apps-node) | `10.10.0.1` | over WireGuard |
 
 Each role owns only its own database. No `SUPERUSER`, no `CREATEDB`, no cross-grants.
+
+## MariaDB (apps-node only)
+
+For apps that require MySQL/MariaDB instead of Postgres (EspoCRM, later
+ERPNext/Frappe HR - see D-17 in `02-architecture-decisions.md`). Same naming
+pattern as PostgreSQL above, different engine and host:
+
+| Item | Pattern | Example |
+|------|---------|---------|
+| Database | `app_<app>` | `app_espocrm` |
+| User | `app_<app>` | `app_espocrm` |
+| Password env var | `<APP>_DB_PASSWORD` | `ESPOCRM_DB_PASSWORD` |
+| Host (from apps-node containers on `apps-internal`) | `apps-mariadb` | no mesh hop - same node |
+| Provisioning script | `scripts/create-mysql-database.sh <app>` | mirrors `create-app-database.sh` |
 
 ## Redis
 

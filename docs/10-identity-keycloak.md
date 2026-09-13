@@ -74,6 +74,7 @@ have a client, and what is its redirect URI" without opening the admin UI.
 | `webmail` | Bulwark Webmail (core) | Confidential | `https://webmail.meenerva.io/*` | `core-node/.env` (`WEBMAIL_OAUTH_CLIENT_SECRET`) |
 | `nextcloud` | Nextcloud (apps) | Confidential | `https://cloud.meenerva.io/apps/user_oidc/code` | Nextcloud admin UI / `occ user_oidc:provider`, not in a repo `.env` (see note below) |
 | `mattermost` | Mattermost (apps), via its "GitLab" OAuth integration | Confidential | `https://chat.meenerva.io/signup/gitlab/complete`, `.../login/gitlab/complete` | Mattermost System Console, not a repo `.env` |
+| `espocrm` | EspoCRM (apps), native OIDC | Confidential | copied from EspoCRM's own Administration -> Authentication -> OIDC screen, not guessed | EspoCRM Administration UI, not a repo `.env` |
 | `security-admin-console` | Keycloak's own admin console | Public | (built-in, do not edit) | n/a |
 
 **Note on Nextcloud's client secret**: unlike core-node services, apps-node app
