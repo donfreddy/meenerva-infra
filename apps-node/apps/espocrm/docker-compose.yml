@@ -5,12 +5,19 @@
 # - EspoCRM supports MySQL/MariaDB only, not Postgres, hence the separate
 # shared engine from core-postgres). No Redis needed.
 #
-# Two containers share the same /var/www/html volume, as EspoCRM's own
-# reference docker-compose does: `espocrm` (web) and `espocrm-daemon` (cron -
-# scheduled jobs, workflow processing, outbound email queue). Both must run
-# for the app to work correctly; the daemon has no HTTP endpoint of its own so
-# it gets no Traefik labels and no healthcheck (matches upstream, which does
-# not define one for it either).
+# Two containers: `espocrm` (web) and `espocrm-daemon` (cron - scheduled
+# jobs, workflow processing, outbound email queue). Both must run for the app
+# to work correctly; the daemon has no HTTP endpoint of its own so it gets no
+# Traefik labels and no healthcheck (matches upstream, which does not define
+# one for it either).
+#
+# Volumes: only `data`, `custom`, and `client/custom` are mounted - NOT the
+# whole /var/www/html. Confirmed live 2026-09-13: mounting the whole tree is
+# EspoCRM's "legacy installation method" (its own entrypoint says so at
+# startup) and permanently blocks in-place upgrades from ever working again.
+# `espocrm-daemon` uses `volumes_from: [espocrm]` so both containers always
+# see the exact same three mounts - no risk of the list drifting out of sync
+# between the two service definitions.
 # =============================================================================
 
 name: meenerva-espocrm
@@ -22,7 +29,9 @@ networks:
     external: true
 
 volumes:
-  espocrm-html:     # full app dir (code + uploads + generated config.php) - add to offsite-backup
+  espocrm-data:           # attachments, generated config.php, uploads - add to offsite-backup
+  espocrm-custom:         # custom backend code/extensions - add to offsite-backup
+  espocrm-client-custom:  # custom frontend code - add to offsite-backup
 
 services:
   espocrm:
@@ -55,7 +64,9 @@ services:
       # it) - configure under Administration > Outbound Emails after first
       # login, pointed at Stalwart. See README.md.
     volumes:
-      - espocrm-html:/var/www/html
+      - espocrm-data:/var/www/html/data
+      - espocrm-custom:/var/www/html/custom
+      - espocrm-client-custom:/var/www/html/client/custom
     labels:
       traefik.enable: "true"
       traefik.docker.network: edge
@@ -87,8 +98,7 @@ services:
     entrypoint: docker-daemon.sh
     environment:
       TZ: ${TZ}
-    volumes:
-      - espocrm-html:/var/www/html
+    volumes_from: [espocrm]
     mem_limit: 384m
 
   # --- OPTIONAL: real-time websocket notifications ---
@@ -107,6 +117,5 @@ services:
   #     ESPOCRM_CONFIG_WEB_SOCKET_URL: "wss://crm.${PRIMARY_DOMAIN}/ws"
   #     ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBSCRIBER_DSN: "tcp://*:7777"
   #     ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBMISSION_DSN: "tcp://apps-espocrm-websocket:7777"
-  #   volumes:
-  #     - espocrm-html:/var/www/html
+  #   volumes_from: [espocrm]
   #   mem_limit: 256m

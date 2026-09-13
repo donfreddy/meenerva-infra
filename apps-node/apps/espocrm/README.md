@@ -88,13 +88,22 @@ section 4), same as every other app.
 - `espocrm-daemon` **must stay running** - it handles scheduled jobs,
   workflow automation, and the outbound email queue. If emails or workflows
   silently stop, check this container first, not just `espocrm`.
-- Both `espocrm` and `espocrm-daemon` share the same `espocrm-html` volume
-  (full `/var/www/html`, not just a data subfolder) - this is how EspoCRM's
-  own reference deployment works, not a simplification on our part.
-- Add `espocrm-html` to `apps-node/docker-compose.yml`'s
-  `offsite-backup.volumes` once real data exists - it holds uploads AND the
-  generated `data/config.php` (DB credentials, install state), not just
-  attachments.
+- `espocrm-daemon` shares `espocrm`'s three volumes via `volumes_from`, not
+  its own copy of the mount list - this guarantees they can never drift out
+  of sync (both containers must see identical `data`/`custom`/`client/custom`
+  state, or scheduled jobs and customizations diverge from what the web UI
+  sees).
+- **Only three subdirectories are mounted** (`data`, `custom`,
+  `client/custom`) - never mount the whole `/var/www/html`. Confirmed live
+  2026-09-13: EspoCRM's own entrypoint detects a full-tree mount as the
+  "legacy installation method" and permanently disables in-place upgrades
+  for that install. If you ever see that warning in `docker logs
+  apps-espocrm`, the volumes are wrong - fix the mounts before doing
+  anything else, don't just ignore the warning.
+- Add `espocrm-data`, `espocrm-custom`, `espocrm-client-custom` to
+  `apps-node/docker-compose.yml`'s `offsite-backup.volumes` once real data
+  exists - `espocrm-data` holds uploads AND the generated `data/config.php`
+  (DB credentials, install state), not just attachments.
 - Real-time websocket notifications are deliberately left commented out in
   `docker-compose.yml` - the UI works fine on polling; only enable it if a
   concrete need for live push shows up.
