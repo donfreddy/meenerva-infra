@@ -538,3 +538,42 @@ fields instead of one URL string (EspoCRM's `ESPOCRM_DATABASE_PASSWORD`,
 Nextcloud's `POSTGRES_PASSWORD`) were never at risk from this specific bug,
 but gain nothing from the old base64 either - no reason to keep two secret
 formats around.
+
+---
+
+## D-19 - a multi-container app's non-web containers still need `edge` if they reach the mesh
+
+**Context.** OpenProject's `openproject-worker`, `openproject-cron`, and
+`openproject-seeder` were put on `apps-internal` only (same reasoning as
+EspoCRM's `espocrm-daemon`: no HTTP endpoint of their own, no Traefik route
+needed). The seeder failed with `PG::ConnectionBad: connection to server at
+"10.10.0.1", port 5432 failed: Network is unreachable` - confirmed via
+`bash -x` tracing the seeder script directly, not a guess. Root cause:
+`apps-internal` is `internal: true`, and Docker gives such a network **no
+gateway at all** - not just "no published ports" (D-14's finding), but no
+route out for ANY traffic the container itself initiates, mesh-bound or
+otherwise. `espocrm-daemon` never hit this because its only dependency
+(`apps-mariadb`) lives on the same node's `apps-internal` network already;
+`openproject-worker`/`cron`/`seeder` need `core-postgres`, which is a
+different *node*, reachable only through the host's `wg0` interface - and
+only `edge` (a plain, non-internal bridge) has a path to that.
+
+**Decision.** Any container that needs to reach a service on another node
+over the WireGuard mesh must join `edge`, regardless of whether it needs an
+HTTP route through Traefik. `apps-internal`/`core-internal` are for
+same-node, container-to-container traffic only (a private sidecar like
+Collabora-to-Nextcloud or espocrm-daemon-to-apps-mariadb) - never assume a
+background/worker container is exempt just because it has no Traefik labels.
+`openproject-worker`, `openproject-cron`, and `openproject-seeder` now join
+`[edge, apps-internal]`, same as the main `openproject` web container.
+
+**Consequences.** When scaffolding a future multi-container app (Frappe's
+bench likely has a similar web/worker/scheduler split), check each
+container's actual dependencies individually rather than copying one
+network list for all of them: same-node-only dependency -> `apps-internal`
+suffices; any dependency on another node (core-postgres, core-redis,
+Stalwart) -> that container needs `edge` too. This is now the second class
+of "internal-only network breaks connectivity" bug found in this repo (D-14
+was inbound/published-port; D-19 is outbound/initiated-by-the-container) -
+worth checking both directions whenever an `internal: true` network is
+involved.

@@ -116,7 +116,16 @@ services:
     container_name: apps-openproject-worker
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
-    networks: [apps-internal]
+    # Needs `edge` too, not just apps-internal: it must reach core-postgres
+    # over the WireGuard mesh (10.10.0.1), and `apps-internal` is
+    # `internal: true` - such networks have NO route out at all, not even
+    # for outbound connections the container initiates itself, only
+    # container-to-container traffic on that same bridge. Confirmed live
+    # 2026-09-13: "PG::ConnectionBad ... Network is unreachable" until this
+    # was added. Distinct from D-14 (that was about published ports on an
+    # internal-only network never working); this is about internal-only
+    # networks having no gateway at all for any outbound traffic.
+    networks: [edge, apps-internal]
     command: ["./docker/prod/worker"]
     environment:
       TZ: ${TZ}
@@ -140,7 +149,7 @@ services:
     container_name: apps-openproject-cron
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
-    networks: [apps-internal]
+    networks: [edge, apps-internal]   # needs core-postgres over the mesh, see openproject-worker's comment above
     command: ["./docker/prod/cron"]
     environment:
       TZ: ${TZ}
@@ -156,7 +165,7 @@ services:
     container_name: apps-openproject-seeder
     restart: on-failure
     security_opt: [no-new-privileges:true]
-    networks: [apps-internal]
+    networks: [edge, apps-internal]   # needs core-postgres over the mesh, see openproject-worker's comment above
     command: ["./docker/prod/seeder"]
     environment:
       TZ: ${TZ}
