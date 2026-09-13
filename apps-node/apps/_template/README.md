@@ -14,9 +14,9 @@
 1. `./scripts/create-app-database.sh APPNAME` (on core-node)
 2. Create the Keycloak client, copy the secret
 3. Add `SUBDOMAIN A <apps-node-ip>` to DNS
-4. Portainer (apps-node) -> Stacks -> Add stack -> Repository ->
-   `apps-node/apps/APPNAME/docker-compose.yml`
-5. Set the stack environment from `.env.example`
+4. `cp apps-node/apps/APPNAME/.env.example apps-node/apps/APPNAME/.env` and fill it in
+5. `./scripts/check-images.sh apps-node/apps/APPNAME/docker-compose.yml`
+6. `make app-up NAME=APPNAME`
 
 ## Backup
 

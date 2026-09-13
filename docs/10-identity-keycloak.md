@@ -97,6 +97,21 @@ full exception to the policy below, not just a break-glass admin - see
 [`apps-node/apps/docuseal/README.md`](../apps-node/apps/docuseal/README.md)
 "Identity" for the reasoning and the offboarding consequence.
 
+**Note on OpenProject (no client at all)**: custom OpenID Connect providers
+are an Enterprise-only add-on in OpenProject, same treatment as Mattermost -
+local accounts, one break-glass admin. See
+[`apps-node/apps/openproject/README.md`](../apps-node/apps/openproject/README.md)
+"Identity".
+
+**Note on Frappe (ERPNext + Frappe HR) - not yet configured**: unlike the
+apps above, Frappe has real, free, native generic OIDC support (Social
+Login Key doctype) - there is no licensing blocker here. Not wired up yet as
+of 2026-09; when it is, create one `frappe` client per the usual pattern
+(section 4 above applies normally) and configure the Social Login Key
+per-site (it is a per-site setting, not shared across the bench's two
+sites). See [`apps-node/apps/frappe/README.md`](../apps-node/apps/frappe/README.md)
+"SSO".
+
 When adding a new app's client, follow the pattern in
 [`08-adding-an-app.md`](08-adding-an-app.md) step 6: `Client authentication: On`,
 `Standard flow: On`, redirect URI scoped to that app's real callback path (not

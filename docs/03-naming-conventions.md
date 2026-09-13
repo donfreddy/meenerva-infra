@@ -63,7 +63,8 @@ One subdomain per user-facing service, `<service>.meenerva.io`.
 | `project.` | apps | OpenProject |
 | `sign.` | apps | DocuSeal |
 | `crm.` | apps | EspoCRM |
-| `erp.` | apps | ERPNext |
+| `erp.` | apps | ERPNext (Frappe bench site 1) |
+| `hr.` | apps | Frappe HR (Frappe bench site 2, same bench as `erp.`) |
 | `siem.` / `analytics.` / `bi.` | data | reserved |
 
 Mail service records (`MX`, `_dmarc`, `_domainkey`, `mta-sts`): see

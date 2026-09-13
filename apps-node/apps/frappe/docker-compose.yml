@@ -1,0 +1,188 @@
+# =============================================================================
+# Frappe :: ERPNext + Frappe HR, on apps-node
+#   erp.meenerva.io   -> ERPNext site
+#   hr.meenerva.io    -> Frappe HR site
+# One bench (one set of app code, one image), TWO sites sharing it - Frappe
+# resolves which site to serve per-request from the incoming Host header
+# (default behavior, see FRAPPE_SITE_NAME_HEADER on the frontend service),
+# so a single `frontend` container/Traefik router handles both hostnames.
+# This is the "two sites on one Frappe stack" approach from docs/09-roadmap.md
+# Phase 4, chosen to save RAM/complexity over two separate deployments.
+#
+# Image: built locally via build/build.sh (frappe+erpnext+hrms) - the
+# official frappe/erpnext image does NOT include hrms, see README.md
+# "Building the image" before assuming `make app-up` alone is enough here.
+#
+# Database: apps-mariadb (shared, D-17) - Frappe's own `bench new-site`
+# creates its own per-site database/user directly against MariaDB root
+# during site creation (see README.md "Deploy"), unlike every other app in
+# this repo where scripts/create-mysql-database.sh pre-provisions a scoped
+# user. This is a deliberate, documented exception: Frappe's tooling expects
+# to self-provision, and the root password is only ever passed as a CLI
+# argument at site-creation time, never baked into a running container's env.
+#
+# Redis: Frappe needs its OWN dedicated redis-cache/redis-queue (RQ job queue
+# + pub/sub), not a shared/authenticated instance - matches frappe_docker's
+# own reference compose exactly (local, unauthenticated, apps-internal only,
+# never reachable outside this node).
+#
+# Networks: containers that can trigger outbound mail (backend and the
+# workers/scheduler, via frappe.sendmail()) join `edge` too, per D-19 - they
+# need the WireGuard mesh route to reach Stalwart on core-node. frontend also
+# needs `edge`, but only for Traefik routing. Everything MariaDB/Redis-only
+# (configurator, websocket, frappe-redis-*) stays on `apps-internal` alone.
+# =============================================================================
+
+name: meenerva-frappe
+
+networks:
+  edge:
+    external: true
+  apps-internal:
+    external: true
+
+x-frappe-image: &frappe_image
+  image: ${FRAPPE_IMAGE:-meenerva/frappe-erpnext-hrms:16}
+  restart: unless-stopped
+  security_opt: [no-new-privileges:true]
+
+x-depends-on-configurator: &depends_on_configurator
+  depends_on:
+    frappe-configurator:
+      condition: service_completed_successfully
+
+volumes:
+  frappe-sites:            # bench code + site configs + assets - add to offsite-backup
+  frappe-redis-queue-data: # RQ job queue durability
+
+services:
+  frappe-configurator:
+    <<: [*frappe_image, *depends_on_configurator]
+    depends_on: {}   # overrides the anchor's own self-reference - this IS the configurator
+    container_name: apps-frappe-configurator
+    networks: [apps-internal]
+    entrypoint: ["bash", "-c"]
+    command:
+      - >
+        ls -1 apps > sites/apps.txt;
+        bench set-config -g db_host $$DB_HOST;
+        bench set-config -gp db_port $$DB_PORT;
+        bench set-config -g redis_cache "redis://$$REDIS_CACHE";
+        bench set-config -g redis_queue "redis://$$REDIS_QUEUE";
+        bench set-config -g redis_socketio "redis://$$REDIS_QUEUE";
+        bench set-config -gp socketio_port $$SOCKETIO_PORT;
+    environment:
+      DB_HOST: apps-mariadb
+      DB_PORT: "3306"
+      REDIS_CACHE: apps-frappe-redis-cache:6379
+      REDIS_QUEUE: apps-frappe-redis-queue:6379
+      SOCKETIO_PORT: 9000
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+    restart: on-failure
+    mem_limit: 256m
+
+  frappe-backend:
+    <<: [*frappe_image, *depends_on_configurator]
+    container_name: apps-frappe-backend
+    networks: [edge, apps-internal]   # edge: outbound mail to Stalwart over the mesh (D-19)
+    environment:
+      GUNICORN_THREADS: "4"
+      GUNICORN_WORKERS: "2"
+      GUNICORN_TIMEOUT: "120"
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+    mem_limit: 1536m
+
+  frappe-frontend:
+    <<: *frappe_image
+    container_name: apps-frappe-frontend
+    networks: [edge, apps-internal]
+    command: ["nginx-entrypoint.sh"]
+    environment:
+      BACKEND: apps-frappe-backend:8000
+      SOCKETIO: apps-frappe-websocket:9000
+      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
+      UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
+      UPSTREAM_REAL_IP_RECURSIVE: "off"
+      PROXY_READ_TIMEOUT: "120"
+      CLIENT_MAX_BODY_SIZE: "50m"
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+    depends_on:
+      - frappe-backend
+      - frappe-websocket
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: edge
+      # Both sites resolve through the SAME router/service - Frappe itself
+      # picks the site to serve based on the Host header (default behavior).
+      traefik.http.routers.frappe.rule: Host(`erp.${PRIMARY_DOMAIN}`) || Host(`hr.${PRIMARY_DOMAIN}`)
+      traefik.http.routers.frappe.entrypoints: websecure
+      traefik.http.routers.frappe.tls.certresolver: letsencrypt
+      traefik.http.routers.frappe.middlewares: security-headers@file
+      traefik.http.services.frappe.loadbalancer.server.port: "8080"
+    healthcheck:
+      # Verify curl/wget exist in this custom-built image before trusting
+      # this - build layers can differ from the base image's own tooling.
+      # See the DocuSeal/EspoCRM/OpenProject precedent in docs/02.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/method/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    mem_limit: 384m
+
+  frappe-websocket:
+    <<: [*frappe_image, *depends_on_configurator]
+    container_name: apps-frappe-websocket
+    networks: [apps-internal]
+    command: ["node", "/home/frappe/frappe-bench/apps/frappe/socketio.js"]
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+    mem_limit: 256m
+
+  frappe-queue-short:
+    <<: [*frappe_image, *depends_on_configurator]
+    container_name: apps-frappe-queue-short
+    networks: [edge, apps-internal]   # edge: queued jobs include outbound mail
+    command: ["bench", "worker", "--queue", "short,default"]
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+    mem_limit: 512m
+
+  frappe-queue-long:
+    <<: [*frappe_image, *depends_on_configurator]
+    container_name: apps-frappe-queue-long
+    networks: [edge, apps-internal]   # edge: queued jobs include outbound mail
+    command: ["bench", "worker", "--queue", "long,default,short"]
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+    mem_limit: 512m
+
+  frappe-scheduler:
+    <<: [*frappe_image, *depends_on_configurator]
+    container_name: apps-frappe-scheduler
+    networks: [edge, apps-internal]   # edge: scheduled jobs include outbound mail
+    command: ["bench", "schedule"]
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+    mem_limit: 256m
+
+  frappe-redis-cache:
+    image: redis:8.6-alpine
+    container_name: apps-frappe-redis-cache
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    networks: [apps-internal]
+    mem_limit: 128m
+
+  frappe-redis-queue:
+    image: redis:8.6-alpine
+    container_name: apps-frappe-redis-queue
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    networks: [apps-internal]
+    volumes:
+      - frappe-redis-queue-data:/data
+    mem_limit: 192m

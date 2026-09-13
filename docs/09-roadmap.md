@@ -74,9 +74,13 @@ the next starts. `[ ]` todo, `[~]` in progress, `[x]` done.
       Frappe. `scripts/create-mysql-database.sh` is the
       `create-app-database.sh`-equivalent tooling. ERPNext/Frappe HR below
       reuse this same instance.
-- [ ] ERPNext + Frappe HR - same Frappe framework/bench; deploy as two
-      "sites" on one Frappe stack rather than two separate deployments to
-      save RAM and complexity
+- [ ] ERPNext + Frappe HR - scaffolded (moved up alongside the Phase 2 apps
+      per the user's queue order, same as OpenProject), not yet deployed.
+      Same Frappe framework/bench; two "sites" (`erp.`/`hr.`) on one stack
+      rather than two separate deployments to save RAM/complexity (D-20).
+      Custom-built image required (official image lacks hrms) - see
+      apps-node/apps/frappe/README.md "Building the image". Real free
+      Keycloak OIDC support (Social Login Key), not yet configured/verified
 - [ ] decision: stay on Compose or move the three nodes into a K3s cluster
 
 ## Phase 5 - Security  (data-node - provision the third VPS)

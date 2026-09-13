@@ -615,3 +615,54 @@ of "internal-only network breaks connectivity" bug found in this repo (D-14
 was inbound/published-port; D-19 is outbound/initiated-by-the-container) -
 worth checking both directions whenever an `internal: true` network is
 involved.
+
+---
+
+## D-20 - Frappe (ERPNext + Frappe HR): custom image build, two sites, self-provisioned database
+
+**Context.** Frappe HR (`hrms`) is not bundled in the official `frappe/erpnext`
+Docker Hub image - only `frappe`+`erpnext`. Installing `hrms` at runtime
+inside a production container (`bench get-app`) is a documented broken path
+upstream (multiple open frappe/frappe_docker and frappe/hrms GitHub issues,
+`ModuleNotFoundError` after install). The supported path is a custom image
+build via frappe_docker's own `images/layered/Containerfile` + an
+`apps.json` listing the extra apps.
+
+**Decision.**
+1. **Build the image locally on apps-node** (`apps-node/apps/frappe/build/`)
+   rather than trust an unofficial third-party pre-built image with erpnext+hrms
+   - reproducible, and the exact source (pinned `frappe_docker` tag +
+   `version-16` branches for frappe/erpnext/hrms) is fully controlled and
+   auditable, matching this repo's general supply-chain caution.
+2. **Two sites, one bench**: `erp.meenerva.io` (ERPNext) and
+   `hr.meenerva.io` (Frappe HR) share the same image, backend, workers, and
+   `frappe-sites` volume - Frappe resolves which site to serve per-request
+   from the Host header, so Traefik needs only one router with an `||` rule
+   covering both hostnames pointed at the same `frontend` container. Saves
+   running two full Frappe stacks (backend + 2 workers + scheduler +
+   websocket + frontend, each) for what is otherwise near-identical
+   infrastructure.
+3. **Database self-provisioning, not `create-mysql-database.sh`**: every
+   other MariaDB-backed app in this repo gets a pre-scoped, non-root
+   user+database via `scripts/create-mysql-database.sh`. Frappe's own
+   `bench new-site` command does not work that way - it expects direct
+   MariaDB root access at site-creation time to create its own
+   database/user. Rather than force Frappe's tooling into this repo's usual
+   pattern (fighting the tool), the root password is passed as a one-time
+   CLI argument to a manually-run `docker exec ... bench new-site` command
+   (see `apps-node/apps/frappe/README.md`) - it is never stored in any
+   running container's environment, keeping the actual blast radius no
+   larger than a single deliberate, logged, human-run command.
+4. **Dedicated `frappe-redis-cache`/`frappe-redis-queue`**, not a shared
+   Redis: matches frappe_docker's own reference architecture, avoids forcing
+   Frappe's RQ/pub-sub usage onto an authenticated shared instance it wasn't
+   designed to expect.
+
+**Consequences.** Frappe is now the only app in this repo requiring a local
+`docker build` step before `make app-up` works - `check-images.sh` cannot
+verify the custom-built tag, only the stock `redis:8.6-alpine` sidecar.
+Version bumps require re-running `build/build.sh` with an updated
+`apps.json`/branch, not just a `docker pull`. `apps-mariadb`'s blast radius
+now includes whatever Frappe's site-creation step did with root access -
+worth an occasional audit (`SHOW DATABASES` on `apps-mariadb`) to confirm
+Frappe only created what was expected.

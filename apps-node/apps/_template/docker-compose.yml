@@ -2,7 +2,7 @@
 # APPLICATION TEMPLATE
 # Copy this directory with:  ./scripts/new-app.sh <name>
 # Then replace every APPNAME / <...> placeholder and delete the parts you do not
-# need. Deploy as a Portainer Git stack pointing at this file.
+# need. Deploy with `make app-up NAME=<name>` (git pull + docker compose, D-12/D-15).
 #
 # Rules (see docs/03 + docs/08):
 #   - pin the image to an explicit version
