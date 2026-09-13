@@ -35,9 +35,10 @@ Takes 10-20+ minutes (downloads erpnext+hrms source, builds frontend assets).
 Requires Docker Engine v23+ with BuildKit (the build uses a `--secret` mount
 for `apps.json` - fails on older Docker with a cryptic secret-mount error).
 Produces `meenerva/frappe-erpnext-hrms:16` locally - `docker-compose.yml`
-already points at this tag via `FRAPPE_IMAGE`, no further config needed.
-To bump versions later, edit `build/apps.json` and `build/build.sh`'s
-`FRAPPE_BRANCH`/`IMAGE_TAG` together, then re-run `build.sh`.
+already has this tag hardcoded, no further config needed. To bump versions
+later, edit `build/apps.json` and `build/build.sh`'s
+`FRAPPE_BRANCH`/`IMAGE_TAG` together, re-run `build.sh`, then update the
+`image:` line in `docker-compose.yml` to match.
 
 ## Deploy
 
@@ -46,9 +47,12 @@ To bump versions later, edit `build/apps.json` and `build/build.sh`'s
 2. Build the image (above).
 3. DNS: `erp A <apps-node-ip>` and `hr A <apps-node-ip>`.
 4. `cp apps-node/apps/frappe/.env.example apps-node/apps/frappe/.env`.
-5. `./scripts/check-images.sh apps-node/apps/frappe/docker-compose.yml`
-   (checks `redis:8.6-alpine` - it will NOT be able to check the locally-built
-   `FRAPPE_IMAGE`, that's expected).
+5. Skip `check-images.sh` for this app: `meenerva/frappe-erpnext-hrms:16` is
+   local-only (just built, not on any registry), so the script will always
+   report it FAILED (`docker manifest inspect` only queries registries) -
+   that specific line is expected noise here, not a real problem. It is
+   still fine (and does something useful) to run it manually if you want to
+   double check the `redis:8.6-alpine` sidecar specifically.
 6. `make app-up NAME=frappe`. Wait for `frappe-configurator` to exit 0 and
    the rest to be `Up` before continuing - the same "a stopped one-shot
    container is success, not a crash" caution as OpenProject's seeder.

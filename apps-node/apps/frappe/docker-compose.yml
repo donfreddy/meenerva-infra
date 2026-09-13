@@ -42,7 +42,13 @@ networks:
     external: true
 
 x-frappe-image: &frappe_image
-  image: ${FRAPPE_IMAGE:-meenerva/frappe-erpnext-hrms:16}
+  # Hardcoded, not ${FRAPPE_IMAGE:-...}: check-images.sh greps raw `image:`
+  # lines and does not resolve compose variable substitution, so a
+  # ${VAR:-default} here reports a false "invalid reference format" FAILED
+  # (confirmed live 2026-09-13) - and there was no real benefit to the
+  # indirection anyway, since check-images.sh can never verify a
+  # locally-built image against a registry regardless of how it's spelled.
+  image: meenerva/frappe-erpnext-hrms:16
   restart: unless-stopped
   security_opt: [no-new-privileges:true]
 
