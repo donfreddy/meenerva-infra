@@ -35,4 +35,14 @@ load_env() {
   set +a
 }
 
-gen_secret() { openssl rand -base64 36; }
+# Hex, not base64: several apps in this repo embed the generated password
+# directly inside a single connection-string env var (e.g.
+# "postgres://user:${PASSWORD}@host/db" - Mattermost, DocuSeal, OpenProject).
+# base64's alphabet includes '/', '+', and '=', any of which can appear at
+# any position, and an unescaped '/' or '+' inside a URI's userinfo silently
+# breaks parsing (confirmed live 2026-09-13: OpenProject's DATABASE_URL
+# failed with "URI::InvalidURIError ... does not accept registry part"
+# because create-app-database.sh had generated a password ending in '/').
+# Hex output is always URL-safe by construction, so this class of bug cannot
+# recur - no encoding-awareness needed at every call site.
+gen_secret() { openssl rand -hex 32; }

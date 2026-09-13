@@ -500,3 +500,41 @@ already work.
 `mem_limit`); revisit the apps-node RAM budget in `01-architecture.md` as
 more MariaDB-backed apps land. `MARIADB_ROOT_PASSWORD` is a new required
 secret in `apps-node/.env`.
+
+---
+
+## D-18 - `gen_secret()` must produce URL-safe passwords, not base64
+
+**Context.** OpenProject failed to boot on first deploy with `URI::InvalidURIError:
+the scheme postgres does not accept registry part: app_openproject:<password>
+(or bad hostname?)`. Root cause: `scripts/create-app-database.sh` generates
+passwords via `gen_secret()` (`openssl rand -base64 36`), and the generated
+password happened to end in `/`. Several apps embed the DB password directly
+inside a single connection-string env var - `postgres://user:${PASSWORD}@host/db`
+(Mattermost's `MM_SQLSETTINGS_DATASOURCE`, DocuSeal's `DATABASE_URL`,
+OpenProject's `DATABASE_URL`) - and an unescaped `/` (or `+`) inside a URI's
+userinfo component breaks parsing: the parser hits the `/` before it ever
+finds the `@` separating userinfo from host, and reports a mangled, host-less
+"registry part" error that looks unrelated to the real cause. base64's
+alphabet (`A-Za-z0-9+/=`) can produce any of `/`, `+`, `=` at any position in
+any generated secret - this was latent, not new, and could equally have hit
+Mattermost's or DocuSeal's DB password without anyone noticing until a
+restart regenerated a differently-unlucky string.
+
+**Decision.** Change `gen_secret()` in `scripts/lib/common.sh` from
+`openssl rand -base64 36` to `openssl rand -hex 32`. Hex output
+(`0-9a-f` only) is unconditionally URL-safe, shell-safe, and YAML-safe - no
+call site needs to know or care that the value might need encoding.
+
+**Consequences.** Only affects *newly generated* secrets - existing passwords
+already stored in a `.env` are untouched (matches `create-app-database.sh`'s
+and `create-mysql-database.sh`'s existing safe-by-default re-run behavior,
+D-13-adjacent). Any app whose DB password happens to already contain `/`,
+`+`, or `=` needs a one-time rotation: `ROTATE=1 ./scripts/create-app-database.sh
+<app>` (or the mysql equivalent), then update that app's `.env` and redeploy
+it - check `grep -E '[/+=]' <app>/.env` on every `*_DB_PASSWORD` /
+`*_SECRET*` line as a quick audit. Apps that pass DB credentials as discrete
+fields instead of one URL string (EspoCRM's `ESPOCRM_DATABASE_PASSWORD`,
+Nextcloud's `POSTGRES_PASSWORD`) were never at risk from this specific bug,
+but gain nothing from the old base64 either - no reason to keep two secret
+formats around.
