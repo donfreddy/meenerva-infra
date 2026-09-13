@@ -405,3 +405,43 @@ already applied once in D-12 and the anticipated value did not show up even
 with the tool live, accessible, and unremoved for the entire rest of Phase 1 -
 carrying it further on hope alone was not worth the RAM and the public
 attack surface.
+
+---
+
+## D-16 - `ufw route allow` needed for container-to-mesh traffic, not just `ufw allow`
+
+**Context.** Mattermost (apps-node) failed to reach `core-stalwart:587` for
+outbound mail with `connection refused`, even though `core-stalwart` was
+confirmed healthy and publishing `0.0.0.0:587`, and an identical `nc` check
+run **directly on the apps-node host** to `10.10.0.1:5432`/`6379` had
+succeeded earlier (during the D-14 investigation). Retesting from a container
+on `edge` (`docker run --rm --network edge busybox nc -zv 10.10.0.1 587`)
+reproduced the failure - the working host-level test and the failing
+container-level test were never actually the same code path, and nobody had
+tested the container path until Mattermost needed it for real.
+
+Root cause: a container's packet to a mesh peer is routed by the host through
+a *different* interface (its Docker bridge in, `wg0` out), which the kernel
+treats as **forwarded** traffic - the `FORWARD` chain, not `INPUT`/`OUTPUT`.
+`ufw status verbose` showed `Default: deny (incoming), allow (outgoing), deny
+(routed)` - every `ufw allow` rule added so far (D-04/init-*-node.sh) only
+covers `INPUT` (traffic addressed to the host itself), so `deny (routed)`
+silently blocked every container's mesh-bound packet regardless of those
+rules. This is orthogonal to D-14 (that was Docker never creating a NAT rule
+at all; this is UFW blocking traffic Docker *did* forward correctly).
+
+**Decision.** Add `ufw route allow out on wg0 to 10.10.0.0/24` (the `ufw
+route` subcommand targets the `FORWARD` chain specifically) to both
+`init-core-node.sh` and `init-apps-node.sh`, alongside the existing `ufw
+allow from <mesh> to any port <p>` rules. Both are required together: `ufw
+allow ... port <p>` permits the *destination* node to accept the connection
+at all; `ufw route allow out on wg0` permits the *source* node's kernel to
+forward a container's packet out through the tunnel in the first place.
+
+**Consequences.** Any node bootstrapped before this fix needs the rule added
+by hand (`ufw route allow out on wg0 to 10.10.0.0/24 && ufw reload`) since
+`init-*-node.sh` is not re-run automatically. Verified against Mattermost's
+real SMTP-relay traffic, not just a synthetic `nc` check, so this is the
+actual fix, not a theory. Anything added later that needs a container on one
+node to reach a service on another over the mesh depends on this rule already
+being in place - it is not specific to Mattermost or to port 587.

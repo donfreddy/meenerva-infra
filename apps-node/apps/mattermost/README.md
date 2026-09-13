@@ -82,3 +82,5 @@ not even be unlocked in this edition.
   `offsite-backup.volumes` once real data exists (uploaded files live there;
   messages themselves are in `app_mattermost`, already covered by the
   nightly core-postgres dump).
+
+> To-Do: Mattermost cannot reach Stalwart via the tunnel for SMTP. Not blocking access to the site, but will prevent email notifications.

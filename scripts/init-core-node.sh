@@ -29,6 +29,13 @@ ufw allow 51820/udp     comment 'wireguard'
 ufw allow from "${MESH_SUBNET}" to any port 5432 proto tcp comment 'postgres (mesh)'
 ufw allow from "${MESH_SUBNET}" to any port 6379 proto tcp comment 'redis (mesh)'
 ufw allow from "${MESH_SUBNET}" to any port 22   proto tcp comment 'ssh (mesh)'
+# Docker containers on this node reaching a peer over the mesh go through the
+# FORWARD chain, not INPUT/OUTPUT - UFW's default `deny (routed)` blocks that
+# regardless of the `allow` rules above, which only cover traffic to/from
+# this host itself. Confirmed live on apps-node reaching core-node's
+# postgres/redis/stalwart; add the same rule here for symmetry (e.g. a
+# future n8n workflow calling an apps-node or data-node service directly).
+ufw route allow out on wg0 to "${MESH_SUBNET}" comment 'containers to mesh peers'
 ufw reload
 ok "firewall configured"
 
