@@ -111,6 +111,16 @@ else here) once the exact form fields are confirmed live.
 
 ## Notes
 
+- **Both sites look nearly identical - this is expected, not a routing
+  bug.** `bench --site hr.meenerva.io install-app hrms` auto-installs
+  `erpnext` too (hrms depends on it), so `hr.meenerva.io` ends up with
+  frappe+erpnext+hrms while `erp.meenerva.io` has only frappe+erpnext -
+  confirmed via `bench --site <site> list-apps`. The only functional
+  difference is the HR module/workspaces on `hr.meenerva.io`; the rest of
+  the desk UI looks the same because it mostly is the same app (ERPNext).
+  If the Host-header routing itself were broken, both sites would show
+  `list-apps` output for the SAME database - check that first if this comes
+  up again, not the visual similarity alone.
 - **All background containers
   (`frappe-backend`/`frappe-queue-short`/`frappe-queue-long`/`frappe-scheduler`)
   join `edge`, not just `apps-internal`** - they can all trigger outbound

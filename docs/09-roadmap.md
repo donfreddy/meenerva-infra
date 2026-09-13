@@ -74,13 +74,15 @@ the next starts. `[ ]` todo, `[~]` in progress, `[x]` done.
       Frappe. `scripts/create-mysql-database.sh` is the
       `create-app-database.sh`-equivalent tooling. ERPNext/Frappe HR below
       reuse this same instance.
-- [ ] ERPNext + Frappe HR - scaffolded (moved up alongside the Phase 2 apps
-      per the user's queue order, same as OpenProject), not yet deployed.
-      Same Frappe framework/bench; two "sites" (`erp.`/`hr.`) on one stack
-      rather than two separate deployments to save RAM/complexity (D-20).
-      Custom-built image required (official image lacks hrms) - see
-      apps-node/apps/frappe/README.md "Building the image". Real free
-      Keycloak OIDC support (Social Login Key), not yet configured/verified
+- [x] ERPNext + Frappe HR - deployed on apps-node (`erp.meenerva.io`,
+      `hr.meenerva.io`), moved up alongside the Phase 2 apps per the user's
+      queue order, same as OpenProject. Same Frappe framework/bench; two
+      "sites" sharing one stack (D-20) - `hr.` also has erpnext installed
+      (hrms depends on it), so both sites look similar; see
+      apps-node/apps/frappe/README.md "Notes" before assuming that means
+      routing is broken. Custom-built image (official image lacks hrms).
+      Real free Keycloak OIDC support (Social Login Key), not yet
+      configured/verified. Outbound mail not yet configured per site
 - [ ] decision: stay on Compose or move the three nodes into a K3s cluster
 
 ## Phase 5 - Security  (data-node - provision the third VPS)
