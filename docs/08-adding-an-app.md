@@ -73,7 +73,28 @@ make app-up NAME=metabase
 
 Traefik picks up the labels within seconds and issues the certificate.
 
-## 8. Register it
+## 8. Wire its volume(s) into offsite-backup
+
+Each app is its own compose project, so its volumes are NOT visible to the
+`offsite-backup` service in `apps-node/docker-compose.yml` by bare name - it
+runs in the `meenerva-apps` project. For each stateful volume the app declares
+(skip anything purely reconstructible, like an `-html`/app-code volume):
+
+- In `apps-node/docker-compose.yml`'s top-level `volumes:`, add it as
+  `external: true` with `name: <app's compose project name>_<volume-name>`
+  (the project name is the app's `name:` field, or its directory name if that
+  field is absent - always set `name:` per step 4 so this stays predictable).
+- Mount it read-only under `/backup/<volume-name>` in the `offsite-backup`
+  service.
+- If the app's data lives in `apps-mariadb` (MySQL/MariaDB) rather than its
+  own volume, there is currently no dump mechanism for that database (unlike
+  core-postgres's `postgres-backup-local`) - flag this rather than skipping
+  it silently.
+
+Verify the external volume actually exists after first deploy:
+`docker volume ls | grep <app>` on apps-node.
+
+## 9. Register it
 
 - Add the row to the subdomain table in [`03-naming-conventions.md`](03-naming-conventions.md).
 - Add the Redis index (if used) to the table in `core-node/.env.example`.
@@ -93,6 +114,7 @@ Traefik picks up the labels within seconds and issues the certificate.
 - [ ] DB / Redis / SMTP / OIDC wired to core-node endpoints
 - [ ] Keycloak client created
 - [ ] DNS record added
+- [ ] stateful volume(s) wired into offsite-backup (external volume + mount)
 - [ ] docs updated (naming, roadmap)
 - [ ] deployed with `make app-up NAME=<app>`, cert issued
 ```

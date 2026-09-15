@@ -29,6 +29,43 @@ volumes:
   traefik-acme:
   apps-offsite-cache:
   mariadb-data:
+  # Each app below is its OWN compose project (make app-up NAME=<app>), so its
+  # volumes live in a different Docker Compose namespace than this file's.
+  # Referencing them here as `external: true` is the only way offsite-backup
+  # (which runs in the `meenerva-apps` project) can mount them. The prefix is
+  # each app's compose project name: the `name:` field in its
+  # apps/<app>/docker-compose.yml, or - for the apps below that don't set one
+  # (frappe, espocrm, openproject) - the bare directory name, which is
+  # Compose's default project name. Verify with `docker volume ls` on
+  # apps-node before relying on these; if an app's `name:` field is ever
+  # added/changed, update the prefix here too or the mount silently 404s.
+  nextcloud-data:
+    external: true
+    name: meenerva-nextcloud_nextcloud-data
+  mattermost-data:
+    external: true
+    name: meenerva-mattermost_mattermost-data
+  mattermost-config:
+    external: true
+    name: meenerva-mattermost_mattermost-config
+  frappe-sites:
+    external: true
+    name: frappe_frappe-sites
+  espocrm-data:
+    external: true
+    name: espocrm_espocrm-data
+  espocrm-custom:
+    external: true
+    name: espocrm_espocrm-custom
+  espocrm-client-custom:
+    external: true
+    name: espocrm_espocrm-client-custom
+  docuseal-data:
+    external: true
+    name: meenerva-docuseal_docuseal-data
+  openproject-data:
+    external: true
+    name: openproject_openproject-data
 
 services:
 
@@ -121,6 +158,19 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - apps-offsite-cache:/backup/cache
-      # Add each app's stateful volume here, read-only, e.g.:
-      # - nextcloud-data:/backup/nextcloud-data:ro
+      - nextcloud-data:/backup/nextcloud-data:ro
+      - mattermost-data:/backup/mattermost-data:ro
+      - mattermost-config:/backup/mattermost-config:ro
+      - frappe-sites:/backup/frappe-sites:ro
+      - espocrm-data:/backup/espocrm-data:ro
+      - espocrm-custom:/backup/espocrm-custom:ro
+      - espocrm-client-custom:/backup/espocrm-client-custom:ro
+      - docuseal-data:/backup/docuseal-data:ro
+      - openproject-data:/backup/openproject-data:ro
+      # NOT included: mariadb-data. EspoCRM's and Frappe's actual records live
+      # in MariaDB, and there is currently no dump mechanism for it (unlike
+      # core-postgres's postgres-backup-local) - a raw volume copy of a live
+      # MariaDB datadir risks an inconsistent backup. Needs a mariadb-backup
+      # (or mysqldump) sidecar before this is trustworthy; track as a
+      # follow-up rather than mounting it here as-is.
     mem_limit: 256m
