@@ -388,6 +388,11 @@ services:
     image: offen/docker-volume-backup:v2.43.0
     container_name: core-offsite-backup
     restart: unless-stopped
+    # edge: outbound internet to reach B2. core-internal: reach core-stalwart
+    # for failure-notification emails. Needs both - core-internal alone is
+    # `internal: true` (no route out at all), the same trap documented on
+    # openproject-worker in apps-node/docker-compose.yml.
+    networks: [edge, core-internal]
     environment:
       BACKUP_CRON_EXPRESSION: ${BACKUP_CRON}
       BACKUP_FILENAME: "meenerva-core-%Y%m%dT%H%M%S.tar.gz"
@@ -399,6 +404,16 @@ services:
       AWS_ACCESS_KEY_ID: ${B2_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${B2_SECRET_ACCESS_KEY}
       AWS_S3_PATH: core-node
+      # Email alert on a failed offsite push only (NOTIFICATION_LEVEL=error
+      # is the default - explicit here so it's obvious this does NOT send on
+      # every successful run). Sent through Stalwart itself, authenticating
+      # as the same no-reply@ mailbox n8n already uses (N8N_SMTP_PASSWORD) -
+      # not a new secret. BACKUP_ALERT_EMAIL must be a real mailbox created
+      # in the Stalwart admin UI first (Accounts -> create mailboxes, see
+      # docs/05-dns-and-mail.md) - sending to one that doesn't exist just
+      # bounces silently as far as this container is concerned.
+      NOTIFICATION_LEVEL: error
+      NOTIFICATION_URLS: "smtp://no-reply%40${PRIMARY_DOMAIN}:${N8N_SMTP_PASSWORD}@core-stalwart:587/?fromAddress=no-reply@${PRIMARY_DOMAIN}&toAddresses=${BACKUP_ALERT_EMAIL}&subject=%5Bmeenerva%5D%20core-node%20backup%20FAILED&auth=Plain"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - backup-dumps:/backup/pg-dumps:ro

@@ -183,6 +183,28 @@ make backup NODE=apps        # apps-node
 Single-database restore (e.g. after a bad migration, not a full node loss):
 `./scripts/restore.sh core db n8n` or `./scripts/restore.sh apps db espocrm`.
 
+### Failure notifications
+
+Both `offsite-backup` containers email `BACKUP_ALERT_EMAIL` (`.env`, default
+`alerts@meenerva.io`) if the push to B2 fails - nothing is sent on success
+(`NOTIFICATION_LEVEL=error`, the default). Sent through Stalwart itself using
+the existing no-reply@ mailbox credentials, no new secret required.
+
+**One-time setup:** create `alerts@meenerva.io` as a real mailbox in the
+Stalwart admin UI first (Accounts -> create mailboxes, same flow as
+[`05-dns-and-mail.md`](05-dns-and-mail.md)) - sending to a mailbox that
+doesn't exist fails silently as far as this container can tell.
+
+This only covers the offsite push itself. A failure in the *local* dump step
+(`postgres-backup-local`, `mariadb-backup`) does not stop `offsite-backup`
+from happily re-uploading a stale volume without complaint - neither image
+has its own notification hook. Not currently monitored; would need a
+separate check (e.g. alert if a dump file's mtime is older than expected).
+
+To test the wiring without waiting for a real failure: temporarily break
+`B2_ACCESS_KEY_ID` in `.env`, run `make backup`, confirm the email arrives,
+then revert.
+
 Test the restore path on a throwaway VPS at least once per quarter. A backup you
 have never restored is a hypothesis, not a backup.
 

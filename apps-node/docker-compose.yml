@@ -181,6 +181,10 @@ services:
     image: offen/docker-volume-backup:v2.43.0
     container_name: apps-offsite-backup
     restart: unless-stopped
+    # edge has the outbound route to both B2 and, via the WireGuard mesh at
+    # 10.10.0.1, core-stalwart for failure-notification emails - same
+    # network every other apps-node app already uses to reach core-node.
+    networks: [edge]
     environment:
       BACKUP_CRON_EXPRESSION: ${BACKUP_CRON}
       BACKUP_FILENAME: "meenerva-apps-%Y%m%dT%H%M%S.tar.gz"
@@ -192,6 +196,13 @@ services:
       AWS_ACCESS_KEY_ID: ${B2_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${B2_SECRET_ACCESS_KEY}
       AWS_S3_PATH: apps-node
+      # Email alert on a failed offsite push only - see the matching comment
+      # on core-node's offsite-backup for the full rationale. Reuses the
+      # same no-reply@ mailbox creds every other apps-node app already
+      # authenticates with (MAIL_FROM / MAIL_FROM_PASSWORD), sent to
+      # BACKUP_ALERT_EMAIL (must exist as a real Stalwart mailbox first).
+      NOTIFICATION_LEVEL: error
+      NOTIFICATION_URLS: "smtp://no-reply%40${PRIMARY_DOMAIN}:${MAIL_FROM_PASSWORD}@${CORE_SMTP_HOST}:${CORE_SMTP_PORT}/?fromAddress=${MAIL_FROM}&toAddresses=${BACKUP_ALERT_EMAIL}&subject=%5Bmeenerva%5D%20apps-node%20backup%20FAILED&auth=Plain"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - apps-offsite-cache:/backup/cache
