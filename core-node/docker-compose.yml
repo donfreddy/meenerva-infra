@@ -377,6 +377,23 @@ services:
       BACKUP_KEEP_WEEKS: "8"
       BACKUP_KEEP_MONTHS: "6"
       HEALTHCHECK_PORT: "8080"
+    labels:
+      # Runs inside THIS container right before offsite-backup archives
+      # backup-dumps (matched via EXEC_LABEL on the offsite-backup service
+      # below). A non-zero exit here is treated as a fatal backup error by
+      # offen/docker-volume-backup, so a stale dump - meaning this container's
+      # own cron dump silently stopped working - fires the same
+      # NOTIFICATION_URLS email as a failed B2 push, instead of offsite-backup
+      # happily re-uploading old data forever without anyone noticing.
+      # 1560min = 26h: one BACKUP_CRON cycle (daily) plus margin.
+      docker-volume-backup.exec-label: dump-freshness
+      # $ doubled ($$) throughout - compose interpolates $VAR in label values
+      # too, and would silently blank out the shell's own variable otherwise
+      # (confirmed live: `docker compose config` showed `$STALE` replaced
+      # with an empty string until this was escaped).
+      docker-volume-backup.archive-pre: >-
+        sh -c 'STALE=$$(find /backups/last -name "*-latest.sql.gz" -mmin +1560);
+        if [ -n "$$STALE" ]; then echo "Stale Postgres dump(s): $$STALE" >&2; exit 1; fi'
     volumes:
       - backup-dumps:/backups
     mem_limit: 128m
@@ -404,6 +421,9 @@ services:
       AWS_ACCESS_KEY_ID: ${B2_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${B2_SECRET_ACCESS_KEY}
       AWS_S3_PATH: core-node
+      # Matches core-postgres-backup's docker-volume-backup.exec-label -
+      # runs that container's archive-pre freshness check before archiving.
+      EXEC_LABEL: dump-freshness
       # Email alert on a failed offsite push only (NOTIFICATION_LEVEL=error
       # is the default - explicit here so it's obvious this does NOT send on
       # every successful run). Sent through Stalwart itself, authenticating

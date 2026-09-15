@@ -195,15 +195,26 @@ Stalwart admin UI first (Accounts -> create mailboxes, same flow as
 [`05-dns-and-mail.md`](05-dns-and-mail.md)) - sending to a mailbox that
 doesn't exist fails silently as far as this container can tell.
 
-This only covers the offsite push itself. A failure in the *local* dump step
-(`postgres-backup-local`, `mariadb-backup`) does not stop `offsite-backup`
-from happily re-uploading a stale volume without complaint - neither image
-has its own notification hook. Not currently monitored; would need a
-separate check (e.g. alert if a dump file's mtime is older than expected).
+A failure in the *local* dump step (`postgres-backup-local`, `mariadb-backup`)
+would not otherwise stop `offsite-backup` from happily re-uploading a stale
+volume without complaint - neither image has its own notification hook. This
+is covered too: `postgres-backup` and `mariadb-backup` each carry a
+`docker-volume-backup.archive-pre` label (matched via `EXEC_LABEL:
+dump-freshness` on their node's `offsite-backup`) that runs a `find -mmin
++1560` check for a dump file older than 26h right before that node's archive
+step starts. A non-zero exit there is a fatal error to
+`offen/docker-volume-backup`, which fires the exact same B2-failure email -
+one notification path for both failure modes, no separate watchdog.
 
-To test the wiring without waiting for a real failure: temporarily break
-`B2_ACCESS_KEY_ID` in `.env`, run `make backup`, confirm the email arrives,
-then revert.
+To test either path without waiting for a real failure:
+- **Offsite push:** temporarily break `B2_ACCESS_KEY_ID` in `.env`, run
+  `make backup`, confirm the email arrives, then revert.
+- **Dump freshness:** `docker exec core-postgres-backup touch -d '2 days ago'
+  /backups/last/postgres-latest.sql.gz` (or the equivalent
+  `latest.<db>.sql.gz` file in `apps-mariadb-backup`'s `/backup`), then
+  `make backup` - confirm the email arrives, then let the next real dump
+  overwrite the fake timestamp (or delete that one file - `postgres-backup`
+  regenerates it, `mariadb-backup` will need a manual /backup.sh run).
 
 Test the restore path on a throwaway VPS at least once per quarter. A backup you
 have never restored is a hypothesis, not a backup.

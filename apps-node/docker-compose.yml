@@ -172,6 +172,14 @@ services:
       # no week/month tiers like postgres-backup-local) - one BACKUP_CRON run
       # per day makes this a reasonable stand-in for BACKUP_RETENTION_DAYS.
       MAX_BACKUPS: ${BACKUP_RETENTION_DAYS}
+    labels:
+      # Same mechanism as core-postgres-backup's matching label in
+      # core-node/docker-compose.yml - see the comment there for why. $
+      # doubled ($$) to survive compose's own interpolation pass.
+      docker-volume-backup.exec-label: dump-freshness
+      docker-volume-backup.archive-pre: >-
+        sh -c 'STALE=$$(find /backup -maxdepth 1 -name "latest.*.sql.gz" -mmin +1560);
+        if [ -n "$$STALE" ]; then echo "Stale MariaDB dump(s): $$STALE" >&2; exit 1; fi'
     volumes:
       - mariadb-dumps:/backup
     mem_limit: 192m
@@ -196,6 +204,9 @@ services:
       AWS_ACCESS_KEY_ID: ${B2_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${B2_SECRET_ACCESS_KEY}
       AWS_S3_PATH: apps-node
+      # Matches mariadb-backup's docker-volume-backup.exec-label - runs that
+      # container's archive-pre freshness check before archiving.
+      EXEC_LABEL: dump-freshness
       # Email alert on a failed offsite push only - see the matching comment
       # on core-node's offsite-backup for the full rationale. Reuses the
       # same no-reply@ mailbox creds every other apps-node app already
