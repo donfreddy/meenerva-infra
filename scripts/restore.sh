@@ -45,12 +45,12 @@ case "${NODE}" in
       "meenerva-nextcloud_nextcloud-data:nextcloud-data"
       "meenerva-mattermost_mattermost-data:mattermost-data"
       "meenerva-mattermost_mattermost-config:mattermost-config"
-      "frappe_frappe-sites:frappe-sites"
-      "espocrm_espocrm-data:espocrm-data"
-      "espocrm_espocrm-custom:espocrm-custom"
-      "espocrm_espocrm-client-custom:espocrm-client-custom"
+      "meenerva-frappe_frappe-sites:frappe-sites"
+      "meenerva-espocrm_espocrm-data:espocrm-data"
+      "meenerva-espocrm_espocrm-custom:espocrm-custom"
+      "meenerva-espocrm_espocrm-client-custom:espocrm-client-custom"
       "meenerva-docuseal_docuseal-data:docuseal-data"
-      "openproject_openproject-data:openproject-data"
+      "meenerva-openproject_openproject-data:openproject-data"
     )
     ;;
   *) die "node must be 'core' or 'apps' - usage: $0 {core|apps} {full|db <name>|list}" ;;

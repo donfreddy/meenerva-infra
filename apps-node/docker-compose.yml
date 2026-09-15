@@ -34,12 +34,12 @@ volumes:
   # volumes live in a different Docker Compose namespace than this file's.
   # Referencing them here as `external: true` is the only way offsite-backup
   # (which runs in the `meenerva-apps` project) can mount them. The prefix is
-  # each app's compose project name: the `name:` field in its
-  # apps/<app>/docker-compose.yml, or - for the apps below that don't set one
-  # (frappe, espocrm, openproject) - the bare directory name, which is
-  # Compose's default project name. Verify with `docker volume ls` on
-  # apps-node before relying on these; if an app's `name:` field is ever
-  # added/changed, update the prefix here too or the mount silently 404s.
+  # each app's compose project name - its `name:` field, which every app here
+  # sets (confirmed live via `docker volume ls` on apps-node 2026-09-17: all
+  # nine of these are prefixed `meenerva-<app>_`, no exceptions). If a new
+  # app's `name:` field is ever added/changed, update the prefix here too or
+  # the mount silently 404s at `make apps-up` - verify with `docker volume ls`
+  # rather than assuming.
   nextcloud-data:
     external: true
     name: meenerva-nextcloud_nextcloud-data
@@ -51,22 +51,22 @@ volumes:
     name: meenerva-mattermost_mattermost-config
   frappe-sites:
     external: true
-    name: frappe_frappe-sites
+    name: meenerva-frappe_frappe-sites
   espocrm-data:
     external: true
-    name: espocrm_espocrm-data
+    name: meenerva-espocrm_espocrm-data
   espocrm-custom:
     external: true
-    name: espocrm_espocrm-custom
+    name: meenerva-espocrm_espocrm-custom
   espocrm-client-custom:
     external: true
-    name: espocrm_espocrm-client-custom
+    name: meenerva-espocrm_espocrm-client-custom
   docuseal-data:
     external: true
     name: meenerva-docuseal_docuseal-data
   openproject-data:
     external: true
-    name: openproject_openproject-data
+    name: meenerva-openproject_openproject-data
 
 services:
 
