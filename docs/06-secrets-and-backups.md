@@ -133,7 +133,7 @@ race the container's pruning.
 `core-node/.env`:
 
 ```
-B2_S3_ENDPOINT=https://s3.eu-central-003.backblazeb2.com
+B2_S3_ENDPOINT=s3.eu-central-003.backblazeb2.com   # bare FQDN, NO https://
 B2_BUCKET=meenerva-backups
 B2_ACCESS_KEY_ID=...
 B2_SECRET_ACCESS_KEY=...
@@ -141,6 +141,12 @@ BACKUP_CRON=0 2 * * *
 BACKUP_RETENTION_DAYS=30
 RESTIC_PASSWORD=...
 ```
+
+`offen/docker-volume-backup`'s S3 client rejects a scheme in `AWS_ENDPOINT`
+with `Endpoint url cannot have fully qualified paths` and the offsite push
+fails outright - B2's console shows this value *with* `https://`, which is
+the trap. `restore.sh` reconstructs the full URL itself for `aws-cli`, which
+needs one; nothing else should read this var expecting a scheme.
 
 Same block in `apps-node/.env` (same B2 bucket, same `RESTIC_PASSWORD` - a
 different one per node just means one node's snapshots become unreadable with

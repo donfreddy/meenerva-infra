@@ -60,7 +60,11 @@ load_env "${ENV_FILE}"
 
 export AWS_ACCESS_KEY_ID="${B2_ACCESS_KEY_ID}"
 export AWS_SECRET_ACCESS_KEY="${B2_SECRET_ACCESS_KEY}"
-S3="aws --endpoint-url ${B2_S3_ENDPOINT} s3"
+# B2_S3_ENDPOINT is a bare FQDN (no scheme) - that's what offen/docker-
+# volume-backup's AWS_ENDPOINT wants, but aws-cli's --endpoint-url needs a
+# full URL, so reconstruct it here rather than storing two differently-
+# shaped copies of the same value in .env.
+S3="aws --endpoint-url https://${B2_S3_ENDPOINT} s3"
 PREFIX="s3://${B2_BUCKET}/${NODE}-node"
 WORK="$(mktemp -d)"
 trap 'rm -rf "${WORK}"' EXIT
