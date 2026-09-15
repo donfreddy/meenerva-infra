@@ -208,7 +208,19 @@ services:
     image: stalwartlabs/stalwart:v0.16.21-alpine
     container_name: core-stalwart
     restart: unless-stopped
-    networks: [edge, core-internal]
+    networks:
+      edge: {}
+      # Alias so other core-internal containers (offsite-backup's failure
+      # notifications) can reach Stalwart by its PUBLIC hostname instead of
+      # "core-stalwart" - required because the TLS certificate's CN/SAN is
+      # mail.meenerva.io, not core-stalwart, and a mismatched name fails TLS
+      # verification regardless of how valid the certificate itself is.
+      # Traffic still never leaves this Docker network - no dependency on
+      # the public IP or the (separately broken, see docs/06) external
+      # port 587 reachability.
+      core-internal:
+        aliases:
+          - ${STALWART_ADMIN_HOST}
     ports:
       - "25:25"       # SMTP  (inbound MX)
       - "465:465"     # SMTPS (implicit TLS)
@@ -433,7 +445,7 @@ services:
       # docs/05-dns-and-mail.md) - sending to one that doesn't exist just
       # bounces silently as far as this container is concerned.
       NOTIFICATION_LEVEL: error
-      NOTIFICATION_URLS: "smtp://no-reply%40${PRIMARY_DOMAIN}:${N8N_SMTP_PASSWORD}@core-stalwart:587/?fromAddress=no-reply@${PRIMARY_DOMAIN}&toAddresses=${BACKUP_ALERT_EMAIL}&subject=%5Bmeenerva%5D%20core-node%20backup%20FAILED&auth=Plain"
+      NOTIFICATION_URLS: "smtp://no-reply%40${PRIMARY_DOMAIN}:${N8N_SMTP_PASSWORD}@${STALWART_ADMIN_HOST}:587/?fromAddress=no-reply@${PRIMARY_DOMAIN}&toAddresses=${BACKUP_ALERT_EMAIL}&subject=%5Bmeenerva%5D%20core-node%20backup%20FAILED&auth=Plain"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - backup-dumps:/backup/pg-dumps:ro

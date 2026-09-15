@@ -193,6 +193,15 @@ services:
     # 10.10.0.1, core-stalwart for failure-notification emails - same
     # network every other apps-node app already uses to reach core-node.
     networks: [edge]
+    # Stalwart's TLS certificate CN/SAN is mail.meenerva.io, not 10.10.0.1 -
+    # connecting by IP would fail certificate verification regardless of how
+    # valid the certificate itself is. This overrides DNS for that one name
+    # inside the container so it resolves to the mesh IP instead of the
+    # public one: traffic still goes out over WireGuard only, never the
+    # public internet (that path has its own, separate, unresolved problem -
+    # see docs/06).
+    extra_hosts:
+      - "${STALWART_ADMIN_HOST}:${CORE_SMTP_HOST}"
     environment:
       BACKUP_CRON_EXPRESSION: ${BACKUP_CRON}
       BACKUP_FILENAME: "meenerva-apps-%Y%m%dT%H%M%S.tar.gz"
@@ -213,7 +222,12 @@ services:
       # authenticates with (MAIL_FROM / MAIL_FROM_PASSWORD), sent to
       # BACKUP_ALERT_EMAIL (must exist as a real Stalwart mailbox first).
       NOTIFICATION_LEVEL: error
-      NOTIFICATION_URLS: "smtp://no-reply%40${PRIMARY_DOMAIN}:${MAIL_FROM_PASSWORD}@${CORE_SMTP_HOST}:${CORE_SMTP_PORT}/?fromAddress=${MAIL_FROM}&toAddresses=${BACKUP_ALERT_EMAIL}&subject=%5Bmeenerva%5D%20apps-node%20backup%20FAILED&auth=Plain"
+      # Host is STALWART_ADMIN_HOST (the hostname), NOT CORE_SMTP_HOST (the
+      # bare IP) - the whole point of extra_hosts above is to make THIS name
+      # resolve to the mesh IP, which only happens if something actually
+      # looks the name up. Embedding the IP directly here would skip DNS
+      # entirely and silently defeat the extra_hosts entry.
+      NOTIFICATION_URLS: "smtp://no-reply%40${PRIMARY_DOMAIN}:${MAIL_FROM_PASSWORD}@${STALWART_ADMIN_HOST}:${CORE_SMTP_PORT}/?fromAddress=${MAIL_FROM}&toAddresses=${BACKUP_ALERT_EMAIL}&subject=%5Bmeenerva%5D%20apps-node%20backup%20FAILED&auth=Plain"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - apps-offsite-cache:/backup/cache
