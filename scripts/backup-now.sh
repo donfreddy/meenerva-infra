@@ -10,20 +10,20 @@ require_cmd docker
 NODE="${1:-core}"
 case "${NODE}" in
   core)
-    PG_BACKUP=core-postgres-backup
+    DB_BACKUP=core-postgres-backup
     OFFSITE=core-offsite-backup
     ;;
   apps)
-    PG_BACKUP=""
+    DB_BACKUP=apps-mariadb-backup
     OFFSITE=apps-offsite-backup
     ;;
   *) die "usage: $0 {core|apps}" ;;
 esac
 
-if [ -n "${PG_BACKUP}" ] && docker ps --format '{{.Names}}' | grep -qx "${PG_BACKUP}"; then
-  log "Running PostgreSQL dump (${PG_BACKUP})"
-  docker exec "${PG_BACKUP}" /backup.sh
-  ok "SQL dumps written to the backup-dumps volume"
+if docker ps --format '{{.Names}}' | grep -qx "${DB_BACKUP}"; then
+  log "Running SQL dump (${DB_BACKUP})"
+  docker exec "${DB_BACKUP}" /backup.sh
+  ok "SQL dumps written to their dump volume"
 fi
 
 docker ps --format '{{.Names}}' | grep -qx "${OFFSITE}" || die "${OFFSITE} not running"

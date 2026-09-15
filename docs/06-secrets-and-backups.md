@@ -84,26 +84,49 @@ Stop it (`Ctrl+C`) when done - it is not meant to stay running.
 
 ```
                          core-node
-  core-postgres --(nightly 02:00, pg_dump per DB)--> /opt/meenerva-infra/backups/pg/*.sql.gz
+  core-postgres --(nightly, pg_dump per DB)--> backup-dumps volume (*.sql.gz)
        |                                                        |
   named volumes (stalwart-data, n8n-data,        +--------------+
   webmail-data, traefik-acme)                    |
        |                                         v
-       +--------> offen/docker-volume-backup --> Backblaze B2 (encrypted, restic-compatible)
+       +--------> offen/docker-volume-backup --> Backblaze B2 (encrypted, GPG)
                                                   bucket: meenerva-backups
-                                                  retention: 30 daily, 8 weekly
+                                                  path: core-node/
+
+                         apps-node
+  apps-mariadb --(nightly, mysqldump per DB)--> mariadb-dumps volume (*.sql.gz)
+       |                                                        |
+  named volumes (nextcloud-data, mattermost-data,+---------------+
+  mattermost-config, frappe-sites, espocrm-data,  |
+  espocrm-custom, espocrm-client-custom,          v
+  docuseal-data, openproject-data)  ---> offen/docker-volume-backup --> Backblaze B2
+                                                  bucket: meenerva-backups
+                                                  path: apps-node/
 ```
 
+Retention (both nodes): controlled by `BACKUP_RETENTION_DAYS` in each node's
+`.env`, enforced by `offen/docker-volume-backup`'s own pruning - not by B2
+bucket lifecycle rules, which are left at "keep all versions" so they don't
+race the container's pruning.
+
 - **Layer 1 - local dumps.** `prodrigestivill/postgres-backup-local`
-  (`core-postgres`) writes rotating per-database SQL dumps to a host path. Fast
-  restore, survives a container loss.
-- **Layer 2 - off-site.** `offen/docker-volume-backup` archives the dump directory
-  **and** the stateful volumes, encrypts them, and pushes to **Backblaze B2**
-  (`~0.006 USD/GB/month`, S3-compatible). Retention + pruning handled by the
-  container.
-- apps-node runs the same `offen` container for its own volumes (Nextcloud config,
-  Mattermost data, ...). Nextcloud user files additionally use Nextcloud's own
-  backup or an object-storage primary.
+  (`core-postgres`) and `fradelg/mysql-cron-backup` (`apps-mariadb`) each write
+  rotating per-database SQL dumps to a host-local volume. Fast restore,
+  survives a container loss, and - critically - dumps the database through its
+  own client instead of copying its live datadir, so the backup is
+  transactionally consistent instead of a torn snapshot of a database still
+  being written to.
+- **Layer 2 - off-site.** `offen/docker-volume-backup` archives the dump
+  directory **and** the stateful (file-based) volumes, encrypts them, and
+  pushes to **Backblaze B2** (`~0.006 USD/GB/month`, S3-compatible). Retention
+  + pruning handled by the container. Each app's compose project is separate
+  from `offsite-backup`'s, so its volumes are wired in as `external: true` -
+  see `apps-node/docker-compose.yml` and the checklist in
+  [`08-adding-an-app.md`](08-adding-an-app.md) for the pattern to follow when
+  a new app is added.
+- Nextcloud user files additionally use Nextcloud's own backup or an
+  object-storage primary once volume grows past what B2-of-a-Docker-volume is
+  comfortable with.
 
 ### Configuration
 
@@ -119,25 +142,40 @@ BACKUP_RETENTION_DAYS=30
 RESTIC_PASSWORD=...
 ```
 
+Same block in `apps-node/.env` (same B2 bucket, same `RESTIC_PASSWORD` - a
+different one per node just means one node's snapshots become unreadable with
+the other node's copy of the passphrase, for no benefit).
+
 ### On-demand backup
 
 ```
-make backup            # or ./scripts/backup-now.sh
+make backup                  # core-node (default)
+make backup NODE=apps        # apps-node
+# or directly: ./scripts/backup-now.sh {core|apps}
 ```
 
 ### Restore (full node loss)
 
 ```
 1. Provision a fresh Ubuntu VPS, set the same rDNS / IP if possible.
-2. git clone the repo, ./scripts/bootstrap-node.sh, ./scripts/init-core-node.sh
-3. Restore secrets: recreate core-node/.env from the password manager.
-4. ./scripts/restore.sh
-     - lists snapshots in B2
+2. git clone the repo, ./scripts/bootstrap-node.sh,
+   ./scripts/init-core-node.sh (core) or ./scripts/init-apps-node.sh (apps)
+3. Restore secrets: recreate that node's .env from the password manager.
+4. make restore NODE=core            # or NODE=apps
+     - lists snapshots in B2 for that node
      - pulls the chosen snapshot
-     - restores volumes, then loads each *.sql.gz into core-postgres
-5. make core-up
-6. Re-check DNS + mail (mail-tester), re-issue Traefik certs (automatic).
+     - restores its volumes, then loads each *.sql.gz into
+       core-postgres (core) or apps-mariadb (apps)
+5. On apps-node specifically: run scripts/create-mysql-database.sh <app> for
+   each MySQL app BEFORE step 4's DB load if apps-mariadb has no users yet
+   (a fresh MariaDB has no app_<name> roles - restore.sh loads data, it does
+   not recreate users/grants).
+6. make core-up   # or: make apps-up, then make app-up NAME=<app> per app
+7. Re-check DNS + mail (mail-tester), re-issue Traefik certs (automatic).
 ```
+
+Single-database restore (e.g. after a bad migration, not a full node loss):
+`./scripts/restore.sh core db n8n` or `./scripts/restore.sh apps db espocrm`.
 
 Test the restore path on a throwaway VPS at least once per quarter. A backup you
 have never restored is a hypothesis, not a backup.

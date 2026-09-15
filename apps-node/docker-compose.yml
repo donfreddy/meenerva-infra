@@ -29,6 +29,7 @@ volumes:
   traefik-acme:
   apps-offsite-cache:
   mariadb-data:
+  mariadb-dumps:
   # Each app below is its OWN compose project (make app-up NAME=<app>), so its
   # volumes live in a different Docker Compose namespace than this file's.
   # Referencing them here as `external: true` is the only way offsite-backup
@@ -139,6 +140,42 @@ services:
       start_period: 30s
     mem_limit: 768m
 
+  # ===========================================================================
+  # mariadb-backup :: nightly mysqldump of every database in apps-mariadb
+  # (local dump only, mirrors core-postgres-backup's role for core-postgres -
+  # see docs/06-secrets-and-backups.md). Dumping via mysqldump instead of
+  # letting offsite-backup tar the live /var/lib/mysql datadir avoids shipping
+  # a torn, inconsistent copy of a database that's being written to while the
+  # tar runs. One .sql.gz per database, so EspoCRM's and Frappe's actual
+  # records (unlike their file-only volumes already wired below) are finally
+  # covered. offsite-backup then picks this dump directory up like any other
+  # volume and ships it to B2 - this container does NOT talk to B2 itself, to
+  # keep B2 credentials and retention policy in one place.
+  # ===========================================================================
+  mariadb-backup:
+    image: fradelg/mysql-cron-backup:1.14.0
+    container_name: apps-mariadb-backup
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    networks: [apps-internal]
+    environment:
+      TZ: ${TZ}
+      MYSQL_HOST: apps-mariadb
+      MYSQL_USER: root
+      MYSQL_PASS: ${MARIADB_ROOT_PASSWORD}
+      CRON_TIME: ${BACKUP_CRON}
+      INIT_BACKUP: "1"
+      # Count of dump cycles kept locally, not calendar days (this image has
+      # no week/month tiers like postgres-backup-local) - one BACKUP_CRON run
+      # per day makes this a reasonable stand-in for BACKUP_RETENTION_DAYS.
+      MAX_BACKUPS: ${BACKUP_RETENTION_DAYS}
+    volumes:
+      - mariadb-dumps:/backup
+    mem_limit: 192m
+
   # Off-site backup of apps-node volumes to Backblaze B2.
   offsite-backup:
     image: offen/docker-volume-backup:v2.43.0
@@ -167,10 +204,8 @@ services:
       - espocrm-client-custom:/backup/espocrm-client-custom:ro
       - docuseal-data:/backup/docuseal-data:ro
       - openproject-data:/backup/openproject-data:ro
-      # NOT included: mariadb-data. EspoCRM's and Frappe's actual records live
-      # in MariaDB, and there is currently no dump mechanism for it (unlike
-      # core-postgres's postgres-backup-local) - a raw volume copy of a live
-      # MariaDB datadir risks an inconsistent backup. Needs a mariadb-backup
-      # (or mysqldump) sidecar before this is trustworthy; track as a
-      # follow-up rather than mounting it here as-is.
+      - mariadb-dumps:/backup/mariadb-dumps:ro
+      # Deliberately NOT mariadb-data itself: that's the live datadir. The
+      # mariadb-backup service above dumps it to mariadb-dumps as consistent
+      # per-database .sql.gz files, which is what gets shipped here instead.
     mem_limit: 256m

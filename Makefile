@@ -88,11 +88,11 @@ app-logs: ## Follow one app's logs on apps-node: make app-logs NAME=nextcloud
 
 ## ---- backups ----
 .PHONY: backup restore
-backup: ## Trigger an on-demand backup to Backblaze B2
-	./scripts/backup-now.sh
+backup: ## Trigger an on-demand backup to Backblaze B2: make backup [NODE=core|apps]
+	./scripts/backup-now.sh $(NODE)
 
-restore: ## Guided restore from Backblaze B2
-	./scripts/restore.sh
+restore: ## Guided restore from Backblaze B2: make restore [NODE=core|apps] [ACTION=full|db|list]
+	./scripts/restore.sh $(NODE) $(ACTION)
 
 ## ---- linting ----
 .PHONY: lint

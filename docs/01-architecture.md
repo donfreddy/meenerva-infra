@@ -49,6 +49,8 @@ outbound mail over the private mesh.
 |---------|---------|
 | Traefik v3 | Edge proxy + ACME TLS for apps-node subdomains |
 | MariaDB 11.4 | Shared relational database for MySQL-only apps (EspoCRM, later ERPNext/Frappe HR) - mutualized like core-postgres, but stays local to apps-node, see D-17 |
+| mariadb-backup (`fradelg/mysql-cron-backup`) | Nightly per-database mysqldump of MariaDB, local dump only (offsite-backup ships it onward) |
+| offsite-backup (`offen/docker-volume-backup`) | Encrypted push of app volumes + MariaDB dumps to Backblaze B2 |
 | Nextcloud + Collabora | Files and documents (first reference app); the Nextcloud **Mail** app is the primary mail client, pointed at Stalwart on core-node (D-11) |
 | Mattermost | Team chat |
 | DocuSeal | Document signing |
