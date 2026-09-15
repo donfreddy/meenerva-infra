@@ -666,3 +666,80 @@ Version bumps require re-running `build/build.sh` with an updated
 now includes whatever Frappe's site-creation step did with root access -
 worth an occasional audit (`SHOW DATABASES` on `apps-mariadb`) to confirm
 Frappe only created what was expected.
+
+---
+
+## D-21 - Backup failure notifications must address Stalwart by its TLS hostname, never an internal name or IP
+
+**Context.** Wiring `offsite-backup`'s failure-notification emails
+(`docs/06-secrets-and-backups.md`) through Stalwart surfaced three
+compounding, unrelated problems, found only by testing with a real external
+SMTP client rather than trusting the admin UI's own state:
+
+1. Stalwart's stored TLS certificate for `mail.meenerva.io` had only the leaf
+   in its `Certificate` field - no intermediate. `openssl s_client -starttls
+   smtp -connect mail.meenerva.io:25 -servername mail.meenerva.io` showed a
+   1-certificate chain and `verify error:num=20: unable to get local issuer
+   certificate`. `docker logs core-stalwart | grep -i acme` was completely
+   empty despite an active, valid ACME account - a real negative signal, not
+   a verbosity artifact (confirmed by re-running with trace-level logging on
+   and still seeing nothing).
+2. Even with a complete chain, Let's Encrypt certs issued after 2026-05-13
+   default to a brand-new root (`ISRG Root YR`/`YE`) that most trust stores
+   don't carry yet - a *correctly chained* cert can still fail verification
+   everywhere for months for this reason alone. Switching the Stalwart
+   `Domain` object's `certificateManagement` to `Automatic` with a new
+   `AcmeProvider` (`Preferred chain: ISRG Root X1`) did not fix it - no
+   `AcmeRenewal` task ever appeared in the startup task list, even after a
+   restart, and no error explained why.
+3. Repeated `openssl s_client` connections to port 587 while debugging (1)
+   and (2) tripped Stalwart's self-lockout abuse protection again (see the
+   `deployment-lessons` memory) - it silently blocked the two troubleshooting
+   IPs, which looked externally indistinguishable from "port 587 is
+   unreachable" (a `Connection refused` from a real external client, on two
+   different networks, with `ufw`, Docker's port mapping, and Stalwart's own
+   listener all confirmed correctly configured).
+
+Once (1) and (3) were resolved - (2) via a one-off `certbot certonly
+--manual --preferred-challenges dns --preferred-chain "ISRG Root X1"` run in
+a throwaway container (DNS-01, since Spaceship isn't ACME-automatable, see
+docs/05), pasted into the same manual `TLS certificates` entry - the
+certificate itself validated cleanly (`Verify return code: 0 (ok)`) from a
+genuine external client. But `offsite-backup`'s notification email still
+would have failed: it connected via `core-stalwart` (core-node) and
+`10.10.0.1` (apps-node, the mesh IP) - neither matches the certificate's
+`mail.meenerva.io` CN/SAN, so STARTTLS hostname verification fails
+regardless of how valid the certificate is.
+
+**Decision.** Any SMTP client inside this infra that authenticates to
+Stalwart over TLS must connect using `STALWART_ADMIN_HOST`
+(`mail.meenerva.io`), never a container name or IP, and must do so without
+actually routing through the public internet (port 587's external
+reachability is separately broken - see below - and there's no reason
+internal traffic should depend on it anyway):
+- core-node: the `stalwart` service carries a `core-internal` network alias
+  for `STALWART_ADMIN_HOST`, so anything on that Docker network resolves the
+  public name straight to the container.
+- apps-node: no shared Docker network exists across nodes, so an
+  `extra_hosts` entry maps `STALWART_ADMIN_HOST` to `CORE_SMTP_HOST` (the
+  mesh IP) instead. The consuming URL must reference the *hostname*, not the
+  IP directly - embedding the IP skips DNS lookup entirely and makes the
+  `extra_hosts` entry inert (caught live: an earlier version of this fix did
+  exactly that).
+
+**Consequences.** Any *future* consumer that needs to authenticate to
+Stalwart over TLS (not the existing n8n/Nextcloud Mail/etc. integrations,
+which are already live and working - leave them alone) should follow the
+same pattern rather than reaching for whatever hostname is locally
+convenient. Two items remain open, tracked separately, neither blocking the
+notification wiring above:
+- Stalwart's own ACME automation not scheduling a renewal task is
+  unexplained. The manual certbot certificate expires **2026-12-14** and
+  will not auto-renew - calendar-remind for ~2026-12-01 to repeat it, or to
+  have resolved the automation by then.
+- Port 587 refusing every external connection (while 25 works) is most
+  likely a Contabo-side restriction tied to this IP's known prior abuse
+  history (see `deployment-lessons` memory) - needs their support panel or a
+  ticket to confirm; nobody on this project currently has panel access. This
+  blocks real external senders submitting mail to the domain on 587, not
+  anything in this repo.

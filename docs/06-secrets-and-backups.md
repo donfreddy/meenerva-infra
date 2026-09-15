@@ -195,6 +195,67 @@ Stalwart admin UI first (Accounts -> create mailboxes, same flow as
 [`05-dns-and-mail.md`](05-dns-and-mail.md)) - sending to a mailbox that
 doesn't exist fails silently as far as this container can tell.
 
+**Both `NOTIFICATION_URLS` connect using `STALWART_ADMIN_HOST`
+(`mail.meenerva.io`), never `core-stalwart` or the mesh IP directly** - the
+TLS certificate's CN/SAN is the public hostname, and STARTTLS verification
+fails on a name mismatch no matter how valid the certificate is otherwise.
+core-node reaches it via a `core-internal` network alias on the `stalwart`
+service (stays inside Docker, no public routing); apps-node reaches it via an
+`extra_hosts` entry pointing that same hostname at the mesh IP
+(`CORE_SMTP_HOST`) - the URL must reference the *hostname*, not the IP
+directly, or DNS lookup (and therefore the `extra_hosts` override) never
+happens at all. Neither path touches the public internet or port 587's
+external reachability, which is a separate, unresolved problem (see below).
+
+**If this ever needs debugging again**, the actual root cause the one time it
+broke (2026-09) was three compounding issues, diagnosed in this order:
+1. Stalwart's stored TLS certificate for `mail.meenerva.io` had only the leaf
+   in its `Certificate` field, no intermediate - `openssl s_client -starttls
+   smtp -connect mail.meenerva.io:25` showed a 1-certificate chain and
+   `verify error:num=20`. Concatenating the correct intermediate (fetched
+   from the leaf's own AIA URL, e.g. `curl http://<aia-host-from-cert>/`)
+   fixed it once pasted into the same field and the container restarted.
+2. Separately, Let's Encrypt's certs issued after 2026-05-13 chain by default
+   through a brand-new root (`ISRG Root YR`/`YE`) not yet in most trust
+   stores - a *complete, correctly-chained* cert can still fail verification
+   everywhere for months for this reason alone. Stalwart's own ACME
+   automation could not be gotten to request the older, universally-trusted
+   chain (a `Domain.certificateManagement = Automatic` switch never actually
+   scheduled a renewal task - unresolved, see below); the working fix was a
+   one-off `certbot certonly --manual --preferred-challenges dns
+   --preferred-chain "ISRG Root X1"` (DNS-01, since Spaceship isn't
+   ACME-automatable - see docs/05) run in a throwaway container, with the
+   resulting `fullchain.pem`/`privkey.pem` pasted into the same manual
+   `TLS certificates` entry. That cert expires **2026-12-14** and will NOT
+   auto-renew - it needs the same manual certbot run repeated before then,
+   or D-21/the ACME automation below resolved first.
+3. Testing this (many repeated `openssl s_client` connections to port 587)
+   triggered Stalwart's self-lockout abuse protection again (see the
+   `deployment-lessons` memory / `docs/02`) - it blocked BOTH the
+   troubleshooting IPs, which looked identical to "port 587 is unreachable"
+   from outside. Checked and cleared under Settings -> Security -> Blocked
+   IPs. Test this port sparingly, one connection at a time, same lesson as
+   before.
+
+**Still unresolved, tracked as follow-ups, not blocking the notifications
+above:**
+- Stalwart's automatic ACME renewal (`Domain.certificateManagement =
+  Automatic`, an `AcmeProvider` with `Preferred chain: ISRG Root X1`) does
+  not appear to schedule an `AcmeRenewal` task at all - none showed up in the
+  startup task list even at trace-level logging. Until this works, the
+  manual certbot renewal above is the only path, and it's expiry-driven, not
+  automatic - **calendar-remind for ~2026-12-01**.
+- Port 587 refuses every external connection (confirmed from two unrelated
+  networks) while port 25 on the same host works fine - ruled out ufw,
+  Docker's port mapping, and Stalwart's own IP block list. Likely a
+  Contabo-side network restriction tied to this IP's known prior abuse
+  history (see `deployment-lessons` memory), which needs their support
+  panel/a ticket to confirm - nobody on this project currently has panel
+  access. This blocks real external mail *submission* to the domain (a
+  sender authenticating on 587 from off-network) but not anything in this
+  repo: nothing here depends on port 587 being reachable from the public
+  internet.
+
 A failure in the *local* dump step (`postgres-backup-local`, `mariadb-backup`)
 would not otherwise stop `offsite-backup` from happily re-uploading a stale
 volume without complaint - neither image has its own notification hook. This
